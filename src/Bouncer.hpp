@@ -12,8 +12,9 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
-#include <unordered_set>
-#include <unordered_map>
+#include <chrono>
+
+typedef std::chrono::high_resolution_clock Clock;
 
 struct LightSource {
     glm::vec3 position;
@@ -51,9 +52,13 @@ protected:
     void initLightSources();
     void initPerspectiveMatrix();
     
+    //-- Rendering methods:
     void uploadCommonSceneUniforms();
     void updateShaderUniforms(const GeometryNode & node, const glm::mat4 & viewMatrix, const glm::mat4 & trans);
     void renderSceneGraph(const SceneNode &node, const glm::mat4 & trans);
+
+    //-- Interaction methods:
+    void movePlayer(unsigned int time);
 
     glm::mat4 m_perpsective;
     glm::mat4 m_view;
@@ -77,4 +82,14 @@ protected:
     // mouse states
     double m_lastMouseX;
     double m_lastMouseY;
+
+    // key states
+    bool m_keyUp;
+    bool m_keyDown;
+    bool m_keyLeft;
+    bool m_keyRight;
+    bool m_keyForward;
+
+    // timer states
+    std::chrono::time_point<std::chrono::high_resolution_clock> m_prevTime;
 };

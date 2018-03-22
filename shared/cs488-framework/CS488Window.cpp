@@ -379,7 +379,7 @@ void CS488Window::run (
 
 	// Setup ImGui binding.  Tell the ImGui subsystem not to
 	// bother setting up its callbacks -- ours will do just fine here.
-	ImGui_ImplGlfwGL3_Init( m_window, false );
+	// ImGui_ImplGlfwGL3_Init( m_window, false );
 
     // Clear error buffer.
     while(glGetError() != GL_NO_ERROR);
@@ -397,7 +397,7 @@ void CS488Window::run (
         // Main Program Loop:
         while (!glfwWindowShouldClose(m_window)) {
             glfwPollEvents();
-			ImGui_ImplGlfwGL3_NewFrame();
+			// ImGui_ImplGlfwGL3_NewFrame();
 
             if (!m_paused) {
 				// Apply application-specific logic
@@ -414,7 +414,7 @@ void CS488Window::run (
 			            &m_framebufferHeight);
 
 	            // Draw any UI controls specified in guiLogic() by derived class.
-	            renderImGui(m_framebufferWidth, m_framebufferHeight);
+	            // renderImGui(m_framebufferWidth, m_framebufferHeight);
 
 				// Finally, blast everything to the screen.
                 glfwSwapBuffers(m_window);

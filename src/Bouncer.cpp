@@ -19,7 +19,14 @@ const float EPSILON = 0.0000001;
 //----------------------------------------------------------------------------------------
 // Constructor
 Bouncer::Bouncer(const std::string & arenaFile)
-    : m_arenaFile(arenaFile)
+    : m_arenaFile(arenaFile),
+      m_keyUp(false),
+      m_keyDown(false),
+      m_keyLeft(false),
+      m_keyRight(false),
+      m_keyForward(false),
+      m_lastMouseX(0.),
+      m_lastMouseY(0.)
 {
 
 }
@@ -71,11 +78,9 @@ void Bouncer::init()
 
     initLightSources();
 
-
-    // Exiting the current scope calls delete automatically on meshConsolidator freeing
-    // all vertex data resources.  This is fine since we already copied this data to
-    // VBOs on the GPU.  We have no use for storing vertex data on the CPU side beyond
-    // this point.
+    m_prevTime = chrono::high_resolution_clock::now();
+    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
 }
 
 //----------------------------------------------------------------------------------------
@@ -235,7 +240,10 @@ void Bouncer::uploadCommonSceneUniforms() {
  */
 void Bouncer::appLogic()
 {
-    // Place per frame, application logic here ...
+    auto now = chrono::high_resolution_clock::now();
+    unsigned int duration = chrono::duration_cast<std::chrono::milliseconds>(now - m_prevTime).count();
+    m_prevTime = now;
+    movePlayer(duration);
 
     uploadCommonSceneUniforms();
 }
@@ -246,15 +254,15 @@ void Bouncer::appLogic()
  */
 void Bouncer::guiLogic()
 {
-    static bool firstRun(true);
-    if (firstRun) {
-        ImGui::SetNextWindowPos(ImVec2(50, 50));
-        firstRun = false;
-    }
+    // static bool firstRun(true);
+    // if (firstRun) {
+    //     ImGui::SetNextWindowPos(ImVec2(50, 50));
+    //     firstRun = false;
+    // }
 
-    static bool showDebugWindow(true);
-    ImGuiWindowFlags windowFlags(ImGuiWindowFlags_AlwaysAutoResize);
-    float opacity(0.5f);
+    // static bool showDebugWindow(true);
+    // ImGuiWindowFlags windowFlags(ImGuiWindowFlags_AlwaysAutoResize);
+    // float opacity(0.5f);
 
     // ImGui::Begin("Properties", &showDebugWindow, ImVec2(100,100), opacity,
     //         windowFlags);
@@ -396,12 +404,12 @@ bool Bouncer::mouseMoveEvent (
 ) {
     bool eventHandled(false);
 
-    if (!ImGui::IsMouseHoveringAnyWindow()) {
-        
-        // Track previous mouse position for calculating delta
-        m_lastMouseX = xPos;
-        m_lastMouseY = yPos;
-    }
+    m_view = rotate(mat4(1.), (float)(yPos - m_lastMouseY) / 1000, vec3(1., 0., 0.)) * m_view;
+    m_view = rotate(mat4(1.), (float)(xPos - m_lastMouseX) / 1000, vec3(0., 1., 0.)) * m_view;
+    
+    // Track previous mouse position for calculating delta
+    m_lastMouseX = xPos;
+    m_lastMouseY = yPos;
 
     return eventHandled;
 }
@@ -416,10 +424,6 @@ bool Bouncer::mouseButtonInputEvent (
         int mods
 ) {
     bool eventHandled(false);
-
-    if (!ImGui::IsMouseHoveringAnyWindow()) {
-        
-    }
 
     return eventHandled;
 }
@@ -469,8 +473,67 @@ bool Bouncer::keyInputEvent (
             glfwSetWindowShouldClose(m_window, GL_TRUE);
             eventHandled = true;
         }
+    }
 
+    if( action == GLFW_PRESS ) {
+        // movement keys
+        if (key == GLFW_KEY_W) {
+            m_keyUp = true;
+        }
+        if (key == GLFW_KEY_S) {
+            m_keyDown = true;
+        }
+        if (key == GLFW_KEY_A) {
+            m_keyLeft = true;
+        }
+        if (key == GLFW_KEY_D) {
+            m_keyRight = true;
+        }
+        if (key == GLFW_KEY_SPACE) {
+            m_keyForward = true;
+        }
+    }
+
+    if( action == GLFW_RELEASE ) {
+        // movement keys
+        if (key == GLFW_KEY_W) {
+            m_keyUp = false;
+        }
+        if (key == GLFW_KEY_S) {
+            m_keyDown = false;
+        }
+        if (key == GLFW_KEY_A) {
+            m_keyLeft = false;
+        }
+        if (key == GLFW_KEY_D) {
+            m_keyRight = false;
+        }
+        if (key == GLFW_KEY_SPACE) {
+            m_keyForward = false;
+        }
     }
 
     return eventHandled;
+}
+
+void Bouncer::movePlayer(unsigned int time)
+{
+    float moveX = 0., moveY = 0., moveZ = 0.;
+    if(m_keyUp) {
+        moveY -= (float)time / 500;
+    }
+    if(m_keyDown) {
+        moveY += (float)time / 500;
+    }
+    if(m_keyLeft) {
+        moveX += (float)time / 500;
+    }
+    if(m_keyRight) {
+        moveX -= (float)time / 500;
+    }
+    if(m_keyForward) {
+        moveZ += (float)time / 500;
+    }
+
+    m_view = translate(mat4(1.), vec3(moveX, moveY, moveZ)) * m_view;
 }

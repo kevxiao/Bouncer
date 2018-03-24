@@ -5,6 +5,8 @@ using namespace std;
 #include "cs488-framework/Exception.hpp"
 #include "cs488-framework/ObjFileDecoder.hpp"
 
+#include <iostream>
+
 
 //----------------------------------------------------------------------------------------
 // Default constructor
@@ -41,11 +43,12 @@ MeshConsolidator::MeshConsolidator(
 	MeshId meshId;
 	vector<vec3> positions;
 	vector<vec3> normals;
+	vector<vec2> uvCoords;
 	BatchInfo batchInfo;
 	unsigned long indexOffset(0);
 
     for(const ObjFilePath & objFile : objFileList) {
-	    ObjFileDecoder::decode(objFile.c_str(), meshId, positions, normals);
+	    ObjFileDecoder::decode(objFile.c_str(), meshId, positions, normals, uvCoords);
 
 	    uint numIndices = positions.size();
 
@@ -54,6 +57,13 @@ MeshConsolidator::MeshConsolidator(
 					"positions.size() != normals.size()\n");
 	    }
 
+	    if (numIndices != uvCoords.size()) {
+		    throw Exception("Error within MeshConsolidator: "
+					"positions.size() != uvCoords.size()\n");
+	    }
+
+	    cout << meshId << endl;
+
 	    batchInfo.startIndex = indexOffset;
 	    batchInfo.numIndices = numIndices;
 
@@ -61,6 +71,7 @@ MeshConsolidator::MeshConsolidator(
 
 	    appendVector(m_vertexPositionData, positions);
 	    appendVector(m_vertexNormalData, normals);
+	    appendVector(m_vertexTexCoords, uvCoords);
 
 	    indexOffset += numIndices;
     }
@@ -87,6 +98,12 @@ const float * MeshConsolidator::getVertexNormalDataPtr() const {
 }
 
 //----------------------------------------------------------------------------------------
+// Returns the starting memory location for vertex normal data.
+const float * MeshConsolidator::getVertexTexCoordsPtr() const {
+    return &(m_vertexTexCoords[0].x);
+}
+
+//----------------------------------------------------------------------------------------
 // Returns the total number of bytes of all vertex position data.
 size_t MeshConsolidator::getNumVertexPositionBytes() const {
 	return m_vertexPositionData.size() * sizeof(vec3);
@@ -96,4 +113,10 @@ size_t MeshConsolidator::getNumVertexPositionBytes() const {
 // Returns the total number of bytes of all vertex normal data.
 size_t MeshConsolidator::getNumVertexNormalBytes() const {
 	return m_vertexNormalData.size() * sizeof(vec3);
+}
+
+//----------------------------------------------------------------------------------------
+// Returns the total number of bytes of all vertex normal data.
+size_t MeshConsolidator::getNumVertexTexCoordsBytes() const {
+	return m_vertexTexCoords.size() * sizeof(vec2);
 }

@@ -4,7 +4,8 @@ includeDirList = {
     "shared",
     "shared/gl3w",
     "shared/imgui",
-    "shared/include"
+    "shared/include",
+    "shared/stb"
 }
 
 libDirectories = { 
@@ -117,6 +118,5 @@ solution "BuildStaticLibs"
         buildoptions (buildOptions)
         libdirs (libDirectories)
         links (linkLibs)
-        linkoptions (linkOptionList)
         includedirs (includeDirList)
         files { "src/*.cpp" }

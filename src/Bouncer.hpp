@@ -13,6 +13,7 @@
 #include <memory>
 #include <vector>
 #include <chrono>
+#include <random>
 
 typedef std::chrono::high_resolution_clock Clock;
 
@@ -21,6 +22,11 @@ struct LightSource {
     glm::vec3 rgbIntensity;
 };
 
+struct Particle{
+    glm::mat4 model;
+    glm::vec3 motion;
+    float life;
+};
 
 class Bouncer : public CS488Window {
 public:
@@ -53,16 +59,22 @@ protected:
     void initViewMatrix();
     void initLightSources();
     void initPerspectiveMatrix();
+    void initGameParams();
+    void initPlayer();
     
     //-- Rendering methods:
     void uploadCommonSceneUniforms();
-    void updateShaderUniforms(const GeometryNode & node, const glm::mat4 & viewMatrix, const glm::mat4 & trans);
-    void renderSceneDepth(const ShaderProgram & shader);
+    void updateShaderUniforms(const GeometryNode & node, const glm::mat4 & trans);
+    void renderSceneDepth(const ShaderProgram & shader, GLuint vao);
     void renderScene();
-    void renderSceneGraph(const ShaderProgram & shader, const SceneNode &node, const glm::mat4 & view, const glm::mat4 & trans);
+    void renderSceneGraph(const ShaderProgram & shader, const SceneNode &node, const glm::mat4 & trans);
+    void renderParticles();
 
     //-- Interaction methods:
     void movePlayer(unsigned int time);
+    void moveBall(unsigned int time);
+    bool playerCollision();
+    bool ballCollision();
 
     glm::mat4 m_perpsective;
     glm::mat4 m_view;
@@ -73,9 +85,6 @@ protected:
     glm::mat4 m_lightPerspsective;
     std::vector<glm::mat4> m_lightViews;
     std::vector<glm::mat4> m_lightViews2;
-
-    std::vector<LightSource> m_lights;
-    std::vector<std::vector<glm::mat4> > m_lightsViews;
 
     //-- GL resources for shader:
     GLuint m_vao_meshData;
@@ -113,6 +122,19 @@ protected:
     GLuint m_depthMapTex2;
     ShaderProgram m_depthShader2;
 
+    //-- GL resources for instanced shader:
+    GLuint m_vao_meshDataIns;
+    GLuint m_vbo_positionsIns;
+    GLuint m_vbo_modelIns;
+    GLint m_positionAttribLocationIns;
+    GLint m_modelAttribLocationIns;
+    ShaderProgram m_instancedShader;
+
+    //-- Particles
+    std::vector<glm::mat4> m_particles;
+    std::vector<glm::vec3> m_particlesMotion;
+    int m_particleLife;
+
     BatchInfoMap m_batchInfoMap;
 
     std::string m_arenaFile;
@@ -136,5 +158,10 @@ protected:
     std::chrono::time_point<std::chrono::high_resolution_clock> m_prevTime;
 
     // game states
-    bool m_paused;
+    glm::vec3 m_ballDir;
+    float m_boost;
+    bool m_inCollision;
+    bool m_gamePaused;
+
+    std::mt19937 m_randomGenerator;
 };

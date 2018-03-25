@@ -49,10 +49,10 @@ float calcShadow(samplerCube sMap, vec3 fragPosition, vec3 lightPos)
     vec3 fragToLight = fragPosition - lightPos;
     float currentDepth = length(fragToLight);
     float shadow = 0.0;
-    float bias = 0.05;
+    float bias = 0.35;
     int samples = 20;
     float viewDistance = length(-fragPosition);
-    float diskRadius = (1.0 + (viewDistance / farPlane)) / farPlane;
+    float diskRadius = (1.0 + (viewDistance / farPlane)) / (0.25 * farPlane);
     for(int i = 0; i < samples; ++i) {
         float closestDepth = texture(sMap, fragToLight + gridSamplingDisk[i] * diskRadius).r;
         closestDepth *= farPlane;
@@ -69,7 +69,7 @@ float calcShadow(samplerCube sMap, vec3 fragPosition, vec3 lightPos)
 vec3 pointLighting(LightSource light, vec3 lightPos, samplerCube sMap, vec3 fragPosition, vec3 fragNormal) {
     // calculate light attenuation over distance
     float distance = length(light.position - fragPosition);
-    float att = 1.0 / (1.0 + 0.007 * distance + 0.0002 * (distance * distance));
+    float att = 1.0 / (1.0 + 0.01 * distance);
 
     // Direction from fragment to light source.
     vec3 l = normalize(light.position - fragPosition);

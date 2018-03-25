@@ -19,6 +19,7 @@ using namespace glm;
 const float EPSILON = 0.0000001;
 const unsigned int SHADOW_HEIGHT = 2048;
 const unsigned int SHADOW_WIDTH = 2048;
+const unsigned int MAX_PARTICLES = 2000;
 
 //----------------------------------------------------------------------------------------
 // Constructor
@@ -31,7 +32,8 @@ Bouncer::Bouncer(const std::string & arenaFile)
       m_keyForward(false),
       m_lastMouseX(0.),
       m_lastMouseY(0.),
-      m_paused(true)
+      m_gamePaused(true),
+      m_particleLife(0)
 {
 
 }
@@ -58,6 +60,7 @@ void Bouncer::init()
 
     processLuaSceneFile(m_arenaFile, m_arenaNode);
     processLuaSceneFile(string("Assets/ball.lua"), m_ballNode);
+    processLuaSceneFile(string("Assets/player.lua"), m_playerNode);
 
     // Load and decode all .obj files at once here.  You may add additional .obj files to
     // this list in order to support rendering additional mesh types.  All vertex
@@ -66,6 +69,7 @@ void Bouncer::init()
     unique_ptr<MeshConsolidator> meshConsolidator (new MeshConsolidator{
             getAssetFilePath("cube.obj"),
             getAssetFilePath("sphere.obj"),
+            getAssetFilePath("sphere_flip.obj"),
             getAssetFilePath("icosphere.obj"),
             getAssetFilePath("icosphere_flip.obj"),
     });
@@ -91,6 +95,13 @@ void Bouncer::init()
     m_prevTime = chrono::high_resolution_clock::now();
     //glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
+
+    initGameParams();
+
+    initPlayer();
+
+    random_device rd;
+    m_randomGenerator.seed(rd());
 }
 
 //----------------------------------------------------------------------------------------
@@ -125,6 +136,11 @@ void Bouncer::createShaderProgram()
     m_depthShader2.attachGeometryShader( getShaderFilePath("DepthGeometryShader.gs").c_str() );
     m_depthShader2.attachFragmentShader( getShaderFilePath("DepthFragmentShader.fs").c_str() );
     m_depthShader2.link();
+
+    m_instancedShader.generateProgramObject();
+    m_instancedShader.attachVertexShader( getShaderFilePath("InstancedVertexShader.vs").c_str() );
+    m_instancedShader.attachFragmentShader( getShaderFilePath("InstancedFragmentShader.fs").c_str() );
+    m_instancedShader.link();
 }
 
 //----------------------------------------------------------------------------------------
@@ -166,14 +182,45 @@ void Bouncer::enableVertexShaderInputSlots()
         CHECK_GL_ERRORS;
     }
 
-    //-- Enable input slots for m_vao_meshDataTex:
+    //-- Enable input slots for m_vao_meshDataDepth:
     {
         glGenVertexArrays(1, &m_vao_meshDataDepth);
         glBindVertexArray(m_vao_meshDataDepth);
 
         // Enable the vertex shader attribute location for "position" when rendering.
         m_positionAttribLocationDepth = m_depthShader.getAttribLocation("position");
-        glEnableVertexAttribArray(m_positionAttribLocationTex);
+        glEnableVertexAttribArray(m_positionAttribLocationDepth);
+
+        CHECK_GL_ERRORS;
+    }
+
+    //-- Enable input slots for m_vao_meshDataDepth2:
+    {
+        glGenVertexArrays(1, &m_vao_meshDataDepth2);
+        glBindVertexArray(m_vao_meshDataDepth2);
+
+        // Enable the vertex shader attribute location for "position" when rendering.
+        m_positionAttribLocationDepth2 = m_depthShader.getAttribLocation("position");
+        glEnableVertexAttribArray(m_positionAttribLocationDepth2);
+
+        CHECK_GL_ERRORS;
+    }
+
+    //-- Enable input slots for m_vao_meshDataIns:
+    {
+        glGenVertexArrays(1, &m_vao_meshDataIns);
+        glBindVertexArray(m_vao_meshDataIns);
+
+        // Enable the vertex shader attribute location for "position" when rendering.
+        m_positionAttribLocationIns = m_instancedShader.getAttribLocation("position");
+        glEnableVertexAttribArray(m_positionAttribLocationIns);
+
+        // Enable the vertex shader attribute location for "model" when rendering.
+        m_modelAttribLocationIns = m_instancedShader.getAttribLocation("model");
+        glEnableVertexAttribArray(m_modelAttribLocationIns);
+        glEnableVertexAttribArray(m_modelAttribLocationIns + 1);
+        glEnableVertexAttribArray(m_modelAttribLocationIns + 2);
+        glEnableVertexAttribArray(m_modelAttribLocationIns + 3);
 
         CHECK_GL_ERRORS;
     }
@@ -263,6 +310,44 @@ void Bouncer::uploadVertexDataToVbos (
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         CHECK_GL_ERRORS;
     }
+
+    // Generate VBO to store all vertex position data
+    {
+        glGenBuffers(1, &m_vbo_vertexPositionsDepth2);
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth2);
+
+        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
+                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        CHECK_GL_ERRORS;
+    }
+
+    // Generate VBO to store all vertex position data
+    {
+        glGenBuffers(1, &m_vbo_positionsIns);
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_positionsIns);
+
+        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
+                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        CHECK_GL_ERRORS;
+    }
+
+    // Generate VBO to store all particle model matrices
+    {
+        glGenBuffers(1, &m_vbo_modelIns);
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_modelIns);
+
+        glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        CHECK_GL_ERRORS;
+    }
 }
 
 //----------------------------------------------------------------------------------------
@@ -294,6 +379,30 @@ void Bouncer::mapVboDataToVertexShaderInputLocations()
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth);
     glVertexAttribPointer(m_positionAttribLocationDepth, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Bind VAO in order to record the data mapping.
+    glBindVertexArray(m_vao_meshDataDepth2);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth2);
+    glVertexAttribPointer(m_positionAttribLocationDepth2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Bind VAO in order to record the data mapping.
+    glBindVertexArray(m_vao_meshDataIns);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_positionsIns);
+    glVertexAttribPointer(m_positionAttribLocationIns, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    auto v4size = sizeof(vec4);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_modelIns);
+    glVertexAttribPointer(m_modelAttribLocationIns, 4, GL_FLOAT, GL_FALSE, 4 * v4size, nullptr);
+    glVertexAttribPointer(m_modelAttribLocationIns + 1, 4, GL_FLOAT, GL_FALSE, 4 * v4size, (void*)v4size);
+    glVertexAttribPointer(m_modelAttribLocationIns + 2, 4, GL_FLOAT, GL_FALSE, 4 * v4size, (void*)(2 * v4size));
+    glVertexAttribPointer(m_modelAttribLocationIns + 3, 4, GL_FLOAT, GL_FALSE, 4 * v4size, (void*)(3 * v4size));
+
+    glVertexAttribDivisor(m_modelAttribLocationIns, 1);
+    glVertexAttribDivisor(m_modelAttribLocationIns + 1, 1);
+    glVertexAttribDivisor(m_modelAttribLocationIns + 2, 1);
+    glVertexAttribDivisor(m_modelAttribLocationIns + 3, 1);
 
     //-- Unbind target, and restore default values:
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -425,11 +534,22 @@ void Bouncer::initViewMatrix() {
 //----------------------------------------------------------------------------------------
 void Bouncer::initLightSources() {
     // World-space position
-    m_light.position = vec3(0.0f, 50.0f, 0.0f);
+    m_light.position = vec3(0.0f, 49.0f, 0.0f);
     m_light.rgbIntensity = vec3(0.8f); // White light
 
-    m_light2.position = vec3(0.0f, -50.0f, 0.0f);
+    m_light2.position = vec3(0.0f, -49.0f, 0.0f);
     m_light2.rgbIntensity = vec3(0.8f); // White light
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::initGameParams() {
+    m_ballDir = vec3(1.0f);
+    m_boost = 1.0f;
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::initPlayer() {
+    m_playerNode->translate(vec3(0.0f, -1.0f, 15.0f));
 }
 
 //----------------------------------------------------------------------------------------
@@ -579,6 +699,13 @@ void Bouncer::uploadCommonSceneUniforms() {
         CHECK_GL_ERRORS;
     }
     m_depthShader2.disable();
+
+    m_instancedShader.enable();
+    {
+        location = m_instancedShader.getUniformLocation("Perspective");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_perpsective));
+    }
+    m_instancedShader.disable();
 }
 
 //----------------------------------------------------------------------------------------
@@ -590,7 +717,21 @@ void Bouncer::appLogic()
     auto now = chrono::high_resolution_clock::now();
     unsigned int duration = chrono::duration_cast<std::chrono::milliseconds>(now - m_prevTime).count();
     m_prevTime = now;
+    if (m_particleLife > 0) {
+        m_particleLife -= duration;
+        if (m_particleLife <= 0) {
+            m_particles.clear();
+            m_particlesMotion.clear();
+        } else {
+            const float moveScale = 100.0;
+            for (unsigned int i = 0; i < m_particles.size(); ++i) {
+                m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 4.0f * (duration / moveScale));
+                m_particles[i] = m_particles[i] * scale(mat4(1), vec3(0.8, 0.8, 0.8));
+            }
+        }
+    }
     movePlayer(duration);
+    moveBall(duration);
 
     uploadCommonSceneUniforms();
 }
@@ -630,10 +771,9 @@ void Bouncer::guiLogic()
 // Update mesh specific shader uniforms:
 void Bouncer::updateShaderUniforms(
         const GeometryNode & node,
-        const mat4 & viewMatrix,
         const mat4 & trans
 ) {
-    mat3 normalMatrix = glm::transpose(glm::inverse(mat3(viewMatrix * trans)));
+    mat3 normalMatrix = glm::transpose(glm::inverse(mat3(m_view * trans)));
     vec3 kd = node.material.kd;
     vec3 ks = node.material.ks;
 
@@ -647,7 +787,7 @@ void Bouncer::updateShaderUniforms(
 
         //-- Set View matrix:
         location = m_shader.getUniformLocation("View");
-        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(viewMatrix));
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_view));
         CHECK_GL_ERRORS;
 
         //-- Set NormMatrix:
@@ -677,7 +817,7 @@ void Bouncer::updateShaderUniforms(
 
         //-- Set View matrix:
         location = m_texShader.getUniformLocation("View");
-        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(viewMatrix));
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_view));
         CHECK_GL_ERRORS;
 
         //-- Set NormMatrix:
@@ -715,7 +855,6 @@ void Bouncer::updateShaderUniforms(
         CHECK_GL_ERRORS;
     }
     m_depthShader2.disable();
-
 }
 
 //----------------------------------------------------------------------------------------
@@ -727,14 +866,14 @@ void Bouncer::draw() {
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMap);
     glClear(GL_DEPTH_BUFFER_BIT);
-    renderSceneDepth(m_depthShader);
+    renderSceneDepth(m_depthShader, m_vao_meshDataDepth);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // render to depth map
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMap2);
     glClear(GL_DEPTH_BUFFER_BIT);
-    renderSceneDepth(m_depthShader2);
+    renderSceneDepth(m_depthShader2, m_vao_meshDataDepth2);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // render to display
@@ -747,24 +886,26 @@ void Bouncer::draw() {
     renderScene();
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
+    renderParticles();
 }
 
 //----------------------------------------------------------------------------------------
-void Bouncer::renderSceneDepth(const ShaderProgram & shader) {
+void Bouncer::renderSceneDepth(const ShaderProgram & shader, GLuint vao) {
 
     mat4 basetrans(1.f);
 
-    glEnable( GL_DEPTH_TEST );
+    glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-    glBindVertexArray(m_vao_meshDataDepth);
-    renderSceneGraph(shader, *m_arenaNode, m_view, basetrans);
-    renderSceneGraph(shader, *m_ballNode, m_view, basetrans);
+    glBindVertexArray(vao);
+    renderSceneGraph(shader, *m_arenaNode, basetrans);
+    renderSceneGraph(shader, *m_ballNode, basetrans);
+    renderSceneGraph(shader, *m_playerNode, basetrans);
     glBindVertexArray(0);
 
     glDisable(GL_CULL_FACE);
-    glDisable( GL_DEPTH_TEST );
+    glDisable(GL_DEPTH_TEST);
 }
 
 //----------------------------------------------------------------------------------------
@@ -772,30 +913,31 @@ void Bouncer::renderScene() {
 
     mat4 basetrans(1.f);
 
-    glEnable( GL_DEPTH_TEST );
+    glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
     glBindVertexArray(m_vao_meshDataTex);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_arenaTextureData);
-    renderSceneGraph(m_texShader, *m_arenaNode, m_view, basetrans);
+    renderSceneGraph(m_texShader, *m_arenaNode, basetrans);
     glBindTexture(GL_TEXTURE_2D, 0);
-    renderSceneGraph(m_shader, *m_ballNode, m_view, basetrans);
+    renderSceneGraph(m_shader, *m_ballNode, basetrans);
+    renderSceneGraph(m_shader, *m_playerNode, basetrans);
     glBindVertexArray(0);
 
     glDisable(GL_CULL_FACE);
-    glDisable( GL_DEPTH_TEST );
+    glDisable(GL_DEPTH_TEST);
 }
 
 //----------------------------------------------------------------------------------------
-void Bouncer::renderSceneGraph(const ShaderProgram & shader, const SceneNode & root, const mat4 & view, const mat4 & trans) {
+void Bouncer::renderSceneGraph(const ShaderProgram & shader, const SceneNode & root, const mat4 & trans) {
 
     const mat4 newtrans = trans * root.trans;
     if (root.m_nodeType == NodeType::GeometryNode) {
         const GeometryNode * geometryNode = static_cast<const GeometryNode *>(&root);
 
-        updateShaderUniforms(*geometryNode, view, newtrans);
+        updateShaderUniforms(*geometryNode, newtrans);
 
         // Get the BatchInfo corresponding to the GeometryNode's unique MeshId.
         BatchInfo batchInfo = m_batchInfoMap[geometryNode->meshId];
@@ -807,10 +949,52 @@ void Bouncer::renderSceneGraph(const ShaderProgram & shader, const SceneNode & r
     }
     
     for (const SceneNode * node : root.children) {
-        renderSceneGraph(shader, *node, view, newtrans);
+        renderSceneGraph(shader, *node, newtrans);
     }
 
     CHECK_GL_ERRORS;
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::renderParticles() {
+    if(m_particles.size() == 0) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    glBindVertexArray(m_vao_meshDataIns);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_modelIns);
+    glBufferData(GL_ARRAY_BUFFER, m_particles.size() * sizeof(glm::mat4), m_particles.data(), GL_STATIC_DRAW);
+
+    // set uniforms for instanced shader
+    m_instancedShader.enable();
+    {
+        BatchInfo batchInfo = m_batchInfoMap["cube"];
+
+        GLuint location;
+        //-- Set View matrix:
+        location = m_instancedShader.getUniformLocation("View");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_view));
+        CHECK_GL_ERRORS;
+
+        //-- Set colour:
+        vec3 ptcolour(1,1,0);
+        location = m_instancedShader.getUniformLocation("colour");
+        glUniform3fv(location, 1, value_ptr(ptcolour));
+        CHECK_GL_ERRORS;
+
+        glDrawArraysInstanced(GL_TRIANGLES, batchInfo.startIndex, batchInfo.numIndices, m_particles.size());
+    }
+    m_instancedShader.disable();
+
+    glBindVertexArray(0);
+
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
 }
 
 //----------------------------------------------------------------------------------------
@@ -844,9 +1028,13 @@ bool Bouncer::mouseMoveEvent (
 ) {
     bool eventHandled(false);
 
-    if(!m_paused) {
-        m_view = rotate(mat4(1.), (float)(yPos - m_lastMouseY) / 1000, vec3(1., 0., 0.)) * m_view;
-        m_view = rotate(mat4(1.), (float)(xPos - m_lastMouseX) / 1000, vec3(0., 1., 0.)) * m_view;
+    if(!m_gamePaused) {
+        float angley = (float)(yPos - m_lastMouseY) / 1000;
+        float anglex = (float)(xPos - m_lastMouseX) / 1000;
+        m_playerNode->trans = m_playerNode->trans * rotate(mat4(1), -angley, vec3(1, 0, 0));
+        m_view = m_view * m_playerNode->trans * rotate(mat4(1), angley, vec3(1, 0, 0)) * inverse(m_playerNode->trans);
+        m_playerNode->trans = m_playerNode->trans * rotate(mat4(1), -anglex, vec3(0, 1, 0));
+        m_view = m_view * m_playerNode->trans * rotate(mat4(1), anglex, vec3(0, 1, 0)) * inverse(m_playerNode->trans);
     }
     
     // Track previous mouse position for calculating delta
@@ -917,19 +1105,19 @@ bool Bouncer::keyInputEvent (
         }
         // gimme mouse back
         if (key == GLFW_KEY_P) {
-            m_paused = !m_paused;
+            m_gamePaused = !m_gamePaused;
             m_keyUp = false;
             m_keyDown = false;
             m_keyLeft = false;
             m_keyRight = false;
             m_keyForward = false;
-            glfwSetInputMode(m_window, GLFW_CURSOR, m_paused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+            glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
             glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
             eventHandled = true;
         }
     }
 
-    if( action == GLFW_PRESS && !m_paused) {
+    if( action == GLFW_PRESS && !m_gamePaused) {
         // movement keys
         if (key == GLFW_KEY_W) {
             m_keyUp = true;
@@ -945,6 +1133,9 @@ bool Bouncer::keyInputEvent (
         }
         if (key == GLFW_KEY_SPACE) {
             m_keyForward = true;
+        }
+        if (key == GLFW_KEY_LEFT_SHIFT) {
+            m_boost = 2.0f;
         }
     }
 
@@ -965,6 +1156,9 @@ bool Bouncer::keyInputEvent (
         if (key == GLFW_KEY_SPACE) {
             m_keyForward = false;
         }
+        if (key == GLFW_KEY_LEFT_SHIFT) {
+            m_boost = 1.0f;
+        }
     }
 
     return eventHandled;
@@ -972,23 +1166,104 @@ bool Bouncer::keyInputEvent (
 
 void Bouncer::movePlayer(unsigned int time)
 {
+    if (m_gamePaused) {
+        return;
+    }
+
     const float moveScale = 100.0;
     float moveX = 0., moveY = 0., moveZ = 0.;
     if(m_keyUp) {
-        moveY -= (float)time / moveScale;
+        moveY -= 1;
     }
     if(m_keyDown) {
-        moveY += (float)time / moveScale;
+        moveY += 1;
     }
     if(m_keyLeft) {
-        moveX += (float)time / moveScale;
+        moveX += 1;
     }
     if(m_keyRight) {
-        moveX -= (float)time / moveScale;
+        moveX -= 1;
     }
     if(m_keyForward) {
-        moveZ += (float)time / moveScale;
+        moveZ += 1;
     }
 
-    m_view = translate(mat4(1.), vec3(moveX, moveY, moveZ)) * m_view;
+    vec3 move(moveX, moveY, moveZ);
+    if(length(move) > EPSILON) {
+        move = normalize(move) * m_boost; 
+    }
+    move *= (float)time / moveScale;
+
+    auto oldView = m_view;
+    auto oldPlayer = m_playerNode->trans;
+    m_view = translate(mat4(1.), move) * m_view;
+    m_playerNode->trans = m_playerNode->trans * translate(mat4(1.), -move);
+    if (playerCollision()) {
+        m_view = oldView;
+        m_playerNode->trans = oldPlayer;
+    }
+}
+
+void Bouncer::moveBall(unsigned int time)
+{
+    if (m_gamePaused) {
+        return;
+    }
+    const float moveScale = 100.0;
+    if(ballCollision()){
+        // particle and sound response
+        uniform_real_distribution<float> dist(-1.0, 1.0);
+        m_particles.resize(MAX_PARTICLES);
+        m_particlesMotion.resize(MAX_PARTICLES);
+        for (unsigned int i = 0; i < m_particles.size(); ++i) {
+            m_particles[i] = m_ballNode->trans;
+            m_particles[i] = scale(m_particles[i], vec3(0.1f, 0.1f, 0.1f));
+            m_particlesMotion[i] = vec3(dist(m_randomGenerator), dist(m_randomGenerator), dist(m_randomGenerator));
+            while(length(m_particlesMotion[i]) < EPSILON) {
+                m_particlesMotion[i] = vec3(dist(m_randomGenerator), dist(m_randomGenerator), dist(m_randomGenerator));
+            }
+            m_particlesMotion[i] = normalize(m_particlesMotion[i]);
+            m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 0.5f);
+        }
+        m_particleLife = 700;
+    }
+
+    m_ballNode->translate(m_ballDir * (2 * time / moveScale));
+}
+
+bool Bouncer::ballCollision()
+{
+    bool collision = false;
+    vec4 playerPos = m_playerNode->trans * vec4(0,0,0,1);
+    vec4 ballPos = m_ballNode->trans * vec4(0,0,0,1);
+    if(length(vec3(ballPos - playerPos)) <= 1.5f || length(vec3(ballPos)) >= 49.5f) {
+        if(!m_inCollision) {
+            if(length(vec3(ballPos - playerPos)) <= 1.5f) {
+                collision = true;
+                m_inCollision = true;
+                vec3 n = normalize(vec3(ballPos - playerPos));
+                m_ballDir = normalize(m_ballDir - (2 * dot(m_ballDir, n) * n));
+            }
+
+            if(length(vec3(ballPos)) >= 49.5f) {
+                collision = true;
+                m_inCollision = true;
+                vec3 n = normalize(vec3(-ballPos));
+                m_ballDir = normalize(m_ballDir - (2 * dot(m_ballDir, n) * n));
+            }
+        }
+    } else if (m_inCollision) {
+        m_inCollision = false;
+    }
+    return collision;
+}
+
+bool Bouncer::playerCollision()
+{
+    bool collision = false;
+    vec4 playerPos = m_playerNode->trans * vec4(0,0,0,1);
+    if(length(vec3(playerPos)) >= 49.0f) {
+        collision = true;
+    }
+    return collision;
 }

@@ -41,7 +41,6 @@
 #include <cstring>
 #include <cstdio>
 #include "lua488.hpp"
-#include "JointNode.hpp"
 #include "GeometryNode.hpp"
 
 // Uncomment the following line to enable debugging messages
@@ -98,45 +97,6 @@ int gr_node_cmd(lua_State* L)
   return 1;
 }
 
-// Create a joint node
-extern "C"
-int gr_joint_cmd(lua_State* L)
-{
-  GRLUA_DEBUG_CALL;
-
-  gr_node_ud* data = (gr_node_ud*)lua_newuserdata(L, sizeof(gr_node_ud));
-  data->node = 0;
-
-  const char* name = luaL_checkstring(L, 1);
-  JointNode* node = new JointNode(name);
-
-  luaL_checktype(L, 2, LUA_TTABLE);
-
-  luaL_argcheck(L, luaL_len(L, 2) == 3, 2, "Three-tuple expected");
-
-  luaL_checktype(L, 3, LUA_TTABLE);
-
-  luaL_argcheck(L, luaL_len(L, 3) == 3, 3, "Three-tuple expected");
-
-  double x[3], y[3];
-  for (int i = 1; i <= 3; i++) {
-    lua_rawgeti(L, 2, i);
-    x[i - 1] = luaL_checknumber(L, -1);
-    lua_rawgeti(L, 3, i);
-    y[i - 1] = luaL_checknumber(L, -1);
-    lua_pop(L, 2);
-  }
-
-  node->set_joint_x(x[0], x[1], x[2]);
-  node->set_joint_y(y[0], y[1], y[2]);
-
-  data->node = node;
-
-  luaL_getmetatable(L, "gr.node");
-  lua_setmetatable(L, -2);
-
-  return 1;
-}
 extern "C"
 int gr_mesh_cmd(lua_State* L)
 {
@@ -339,7 +299,6 @@ int gr_node_gc_cmd(lua_State* L)
 // If you want to add a new non-member function, add it here.
 static const luaL_Reg grlib_functions[] = {
   {"node", gr_node_cmd},
-  {"joint", gr_joint_cmd},
   {"mesh", gr_mesh_cmd},
   {"material", gr_material_cmd},
   {0, 0}

@@ -1,6 +1,6 @@
-#include "CS488Window.hpp"
-#include "cs488-framework/Exception.hpp"
-#include "cs488-framework/OpenGLImport.hpp"
+#include "GlWindow.hpp"
+#include "glframework/Exception.hpp"
+#include "glframework/OpenGLImport.hpp"
 
 #include <sstream>
 #include <iostream>
@@ -18,8 +18,8 @@ extern "C" {
 static void renderImGui (int framebufferWidth, int framebufferHeight);
 
 //-- Static member initialization:
-string CS488Window::m_exec_dir = ".";
-shared_ptr<CS488Window> CS488Window::m_instance = nullptr;
+string GlWindow::m_exec_dir = ".";
+shared_ptr<GlWindow> GlWindow::m_instance = nullptr;
 
 
 static void printGLInfo();
@@ -27,7 +27,7 @@ static void printGLInfo();
 
 //----------------------------------------------------------------------------------------
 // Constructor
-CS488Window::CS488Window()
+GlWindow::GlWindow()
  : m_window(nullptr),
    m_monitor(nullptr),
    m_windowTitle(),
@@ -43,7 +43,7 @@ CS488Window::CS488Window()
 
 //----------------------------------------------------------------------------------------
 // Destructor
-CS488Window::~CS488Window() {
+GlWindow::~GlWindow() {
 	// Free all GLFW resources.
 	glfwTerminate();
 }
@@ -52,7 +52,7 @@ CS488Window::~CS488Window() {
 /*
  * Error callback to be registered with GLFW.
  */
-void CS488Window::errorCallback(
+void GlWindow::errorCallback(
 		int error,
 		const char * description
 ) {
@@ -66,12 +66,12 @@ void CS488Window::errorCallback(
 /*
  * Window resize event callback to be registered with GLFW.
  */
-void CS488Window::windowResizeCallBack (
+void GlWindow::windowResizeCallBack (
 		GLFWwindow * window,
 		int width,
 		int height
 ) {
-	getInstance()->CS488Window::windowResizeEvent(width, height);
+	getInstance()->GlWindow::windowResizeEvent(width, height);
 	getInstance()->windowResizeEvent(width, height);
 }
 
@@ -79,7 +79,7 @@ void CS488Window::windowResizeCallBack (
 /*
  * Key input event callback to be registered with GLFW.
  */
-void CS488Window::keyInputCallBack (
+void GlWindow::keyInputCallBack (
 		GLFWwindow * window,
 		int key,
 		int scancode,
@@ -88,7 +88,7 @@ void CS488Window::keyInputCallBack (
 ) {
 	if(!getInstance()->keyInputEvent(key, action, mods)) {
 		// Send event to parent class for processing.
-		getInstance()->CS488Window::keyInputEvent(key, action, mods);
+		getInstance()->GlWindow::keyInputEvent(key, action, mods);
 	}
 }
 
@@ -96,7 +96,7 @@ void CS488Window::keyInputCallBack (
 /*
  * Mouse scroll event callback to be registered with GLFW.
  */
-void CS488Window::mouseScrollCallBack (
+void GlWindow::mouseScrollCallBack (
 		GLFWwindow * window,
 		double xOffSet,
 		double yOffSet
@@ -109,7 +109,7 @@ void CS488Window::mouseScrollCallBack (
 /*
  * Mouse button event callback to be registered with GLFW.
  */
-void CS488Window::mouseButtonCallBack (
+void GlWindow::mouseButtonCallBack (
 		GLFWwindow * window,
 		int button,
 		int actions,
@@ -122,7 +122,7 @@ void CS488Window::mouseButtonCallBack (
 /*
  *  Mouse move event callback to be registered with GLFW.
  */
-void CS488Window::mouseMoveCallBack (
+void GlWindow::mouseMoveCallBack (
 		GLFWwindow * window,
 		double xPos,
 		double yPos
@@ -134,7 +134,7 @@ void CS488Window::mouseMoveCallBack (
 /*
  * Cursor enter window event callback to be registered with GLFW.
  */
-void CS488Window::cursorEnterWindowCallBack (
+void GlWindow::cursorEnterWindowCallBack (
 		GLFWwindow * window,
 		int entered
 ) {
@@ -145,7 +145,7 @@ void CS488Window::cursorEnterWindowCallBack (
 /*
  * Event handler. Handles window resize events.
  */
-bool CS488Window::windowResizeEvent (
+bool GlWindow::windowResizeEvent (
 		int width,
 		int height
 ) {
@@ -160,7 +160,7 @@ bool CS488Window::windowResizeEvent (
 /*
  * Event handler. Handles key input events.
  */
-bool CS488Window::keyInputEvent (
+bool GlWindow::keyInputEvent (
 		int key,
 		int action,
 		int mods
@@ -198,7 +198,7 @@ bool CS488Window::keyInputEvent (
 /*
  * Event handler. Handles mouse scroll events.
  */
-bool CS488Window::mouseScrollEvent (
+bool GlWindow::mouseScrollEvent (
 		double xOffSet,
 		double yOffSet
 ) {
@@ -209,7 +209,7 @@ bool CS488Window::mouseScrollEvent (
 /*
  * Event handler. Handles mouse button events.
  */
-bool CS488Window::mouseButtonInputEvent (
+bool GlWindow::mouseButtonInputEvent (
 		int button,
 		int actions,
 		int mods
@@ -221,7 +221,7 @@ bool CS488Window::mouseButtonInputEvent (
 /*
  * Event handler. Handles mouse move events.
  */
-bool CS488Window::mouseMoveEvent (
+bool GlWindow::mouseMoveEvent (
 		double xPos,
 		double yPos
 ) {
@@ -232,14 +232,14 @@ bool CS488Window::mouseMoveEvent (
 /*
  * Event handler. Handles mouse cursor entering window area events.
  */
-bool CS488Window::cursorEnterWindowEvent (
+bool GlWindow::cursorEnterWindowEvent (
 		int entered
 ) {
 	return false;
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::centerWindow() {
+void GlWindow::centerWindow() {
 	int windowWidth, windowHeight;
 	glfwGetWindowSize(m_window, &windowWidth, &windowHeight);
 
@@ -263,7 +263,7 @@ void CS488Window::centerWindow() {
 /*
  * Register callbacks with GLFW, and associate events with the current GLFWwindow.
  */
-void CS488Window::registerGlfwCallBacks() {
+void GlWindow::registerGlfwCallBacks() {
 	glfwSetKeyCallback(m_window, keyInputCallBack);
 	glfwSetWindowSizeCallback(m_window, windowResizeCallBack);
 	glfwSetScrollCallback(m_window, mouseScrollCallBack);
@@ -273,23 +273,23 @@ void CS488Window::registerGlfwCallBacks() {
 }
 //----------------------------------------------------------------------------------------
 /*
- * Returns the static instance of class CS488Window.
+ * Returns the static instance of class GlWindow.
  */
-shared_ptr<CS488Window> CS488Window::getInstance()
+shared_ptr<GlWindow> GlWindow::getInstance()
 {
-    static CS488Window * instance = new CS488Window();
+    static GlWindow * instance = new GlWindow();
     if (m_instance == nullptr) {
         // Pass ownership of instance to shared_ptr.
-        m_instance = shared_ptr<CS488Window>(instance);
+        m_instance = shared_ptr<GlWindow>(instance);
     }
     return m_instance;
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::launch (
+void GlWindow::launch (
 		int argc, 
 		char **argv,
-		CS488Window *window,
+		GlWindow *window,
 		int width,
 		int height,
 		const std::string& title, 
@@ -303,7 +303,7 @@ void CS488Window::launch (
 	}
 
 	if( m_instance == nullptr ) {
-        m_instance = shared_ptr<CS488Window>(window);
+        m_instance = shared_ptr<GlWindow>(window);
 		m_instance->run( width, height, title, fps );
 	}
 }
@@ -319,7 +319,7 @@ static void renderImGui (
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::run (
+void GlWindow::run (
 		int width,
 		int height,
 		const string &windowTitle,
@@ -435,7 +435,7 @@ void CS488Window::run (
 
 
 //----------------------------------------------------------------------------------------
-void CS488Window::init() {
+void GlWindow::init() {
 	// Render only the front face of geometry.
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
@@ -454,22 +454,22 @@ void CS488Window::init() {
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::appLogic() {
+void GlWindow::appLogic() {
 
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::draw() {
+void GlWindow::draw() {
 
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::guiLogic() {
+void GlWindow::guiLogic() {
 
 }
 
 //----------------------------------------------------------------------------------------
-void CS488Window::cleanup() {
+void GlWindow::cleanup() {
 
 }
 
@@ -518,12 +518,12 @@ static void printGLInfo() {
 }
 
 //----------------------------------------------------------------------------------------
-std::string CS488Window::getAssetFilePath(const char *base)
+std::string GlWindow::getAssetFilePath(const char *base)
 {
 	return m_exec_dir + "/Assets/" + base;
 }
 
-std::string CS488Window::getShaderFilePath(const char *base)
+std::string GlWindow::getShaderFilePath(const char *base)
 {
     return m_exec_dir + "/Shaders/" + base;
 }

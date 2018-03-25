@@ -2,8 +2,8 @@
 #include "scene_lua.hpp"
 using namespace std;
 
-#include "cs488-framework/GlErrorCheck.hpp"
-#include "cs488-framework/MathUtils.hpp"
+#include "glframework/GlErrorCheck.hpp"
+#include "glframework/MathUtils.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -101,6 +101,8 @@ void Bouncer::init()
     initPlayer();
 
     initAnimations();
+
+    m_soundEngine = irrklang::createIrrKlangDevice();
 
     random_device rd;
     m_randomGenerator.seed(rd());
@@ -429,28 +431,6 @@ void Bouncer::mapTextures()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load and generate the texture
     data = stbi_load(getAssetFilePath("stone.jpg").c_str(), &width, &height, &nrChannels, 0);
-    if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    } else {
-        std::cout << "Failed to load texture" << std::endl;
-    }
-    stbi_image_free(data);
-    data = nullptr;
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    CHECK_GL_ERRORS;
-
-    //-- character textures
-    glGenTextures(1, &m_characterTextureData);
-    glBindTexture(GL_TEXTURE_2D, m_characterTextureData);
-    // set the texture wrapping/filtering options (on the currently bound texture object)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    // load and generate the texture
-    data = stbi_load(getAssetFilePath("metal.jpg").c_str(), &width, &height, &nrChannels, 0);
     if (data) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
@@ -1061,7 +1041,7 @@ void Bouncer::renderParticles() {
  */
 void Bouncer::cleanup()
 {
-
+    m_soundEngine->drop();
 }
 
 //----------------------------------------------------------------------------------------
@@ -1272,7 +1252,7 @@ void Bouncer::moveBall(unsigned int time)
     }
     const float moveScale = 100.0;
     if(ballCollision()){
-        // particle and sound response
+        // particle response
         uniform_real_distribution<float> dist(-1.0, 1.0);
         m_particles.resize(MAX_PARTICLES);
         m_particlesMotion.resize(MAX_PARTICLES);
@@ -1287,6 +1267,9 @@ void Bouncer::moveBall(unsigned int time)
             m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 0.5f);
         }
         m_particleLife = 700;
+
+        // sound response
+        m_soundEngine->play2D(getAssetFilePath("bounce.wav").c_str(), false);
     }
 
     m_ballNode->translate(m_ballDir * (2 * time / moveScale));

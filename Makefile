@@ -6,15 +6,15 @@ ifndef config
 endif
 export config
 
-PROJECTS := cs488-framework imgui lodepng Bouncer
+PROJECTS := glframework imgui lodepng Bouncer
 
 .PHONY: all clean help $(PROJECTS)
 
 all: $(PROJECTS)
 
-cs488-framework: 
-	@echo "==== Building cs488-framework ($(config)) ===="
-	@${MAKE} --no-print-directory -C build -f cs488-framework.make
+glframework: 
+	@echo "==== Building glframework ($(config)) ===="
+	@${MAKE} --no-print-directory -C build -f glframework.make
 
 imgui: 
 	@echo "==== Building imgui ($(config)) ===="
@@ -24,12 +24,12 @@ lodepng:
 	@echo "==== Building lodepng ($(config)) ===="
 	@${MAKE} --no-print-directory -C build -f lodepng.make
 
-Bouncer: cs488-framework imgui
+Bouncer: glframework imgui
 	@echo "==== Building Bouncer ($(config)) ===="
 	@${MAKE} --no-print-directory -C build -f Bouncer.make
 
 clean:
-	@${MAKE} --no-print-directory -C build -f cs488-framework.make clean
+	@${MAKE} --no-print-directory -C build -f glframework.make clean
 	@${MAKE} --no-print-directory -C build -f imgui.make clean
 	@${MAKE} --no-print-directory -C build -f lodepng.make clean
 	@${MAKE} --no-print-directory -C build -f Bouncer.make clean
@@ -44,7 +44,7 @@ help:
 	@echo "TARGETS:"
 	@echo "   all (default)"
 	@echo "   clean"
-	@echo "   cs488-framework"
+	@echo "   glframework"
 	@echo "   imgui"
 	@echo "   lodepng"
 	@echo "   Bouncer"

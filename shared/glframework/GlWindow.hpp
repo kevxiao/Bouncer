@@ -11,14 +11,14 @@
  * Singleton base class for creating a GLFW window and OpenGL context.
  * Call getInstance() in order to obtain the singleton instance of this class.
  */
-class CS488Window {
+class GlWindow {
 public:
-    virtual ~CS488Window();
+    virtual ~GlWindow();
 
 	static void launch (
 			int argc,
 			char **argv,
-			CS488Window *window,
+			GlWindow *window,
 			int width,
 			int height,
 			const std::string& title,
@@ -26,7 +26,7 @@ public:
 	);
 
 protected:
-    CS488Window(); // Prevent direct construction.
+    GlWindow(); // Prevent direct construction.
 
 	static std::string getAssetFilePath(const char *base);
     static std::string getShaderFilePath(const char *base);
@@ -58,13 +58,13 @@ protected:
 	bool m_fullScreen;
 
 private:
-	static std::shared_ptr<CS488Window> m_instance;
+	static std::shared_ptr<GlWindow> m_instance;
 
 	static std::string m_exec_dir;
     
     GLFWmonitor * m_monitor;
 
-	static std::shared_ptr<CS488Window> getInstance();
+	static std::shared_ptr<GlWindow> getInstance();
 
 	void run (
 			int width,

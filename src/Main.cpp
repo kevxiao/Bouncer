@@ -10,7 +10,7 @@ int main( int argc, char **argv )
     if (argc > 1) {
         luaSceneFile = std::string(argv[1]);
     }
-    CS488Window::launch(argc, argv, new Bouncer(luaSceneFile), 1024, 768, title);
+    GlWindow::launch(argc, argv, new Bouncer(luaSceneFile), 1024, 768, title);
 
     return 0;
 }

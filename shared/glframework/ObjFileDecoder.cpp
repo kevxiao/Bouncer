@@ -7,7 +7,7 @@ using namespace glm;
 #include <cstring>
 using namespace std;
 
-#include "cs488-framework/Exception.hpp"
+#include "glframework/Exception.hpp"
 
 
 //---------------------------------------------------------------------------------------

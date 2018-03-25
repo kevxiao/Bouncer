@@ -13,7 +13,7 @@ libDirectories = {
 }
 
 linkLibs = {
-    "cs488-framework",
+    "glframework",
     "imgui",
     "glfw3",
     "lua",
@@ -26,10 +26,13 @@ linkLibs = {
     "X11",
     "stdc++",
     "dl",
-    "pthread"
+    "pthread",
+    "IrrKlang"
 }
 
 buildOptions = {"-std=c++11"}
+
+linkOptions = {"'-Wl,-rpath,$$ORIGIN/lib'"}
 
 -- Build glfw3 static library and copy it into <cs488_root>/lib if it is not
 -- already present.
@@ -66,8 +69,8 @@ solution "BuildStaticLibs"
         defines { "NDEBUG" }
         flags { "Optimize" }
 
-    -- Builds cs488-framework static library
-    project "cs488-framework"
+    -- Builds glframework static library
+    project "glframework"
         kind "StaticLib"
         language "C++"
         location "build"
@@ -75,7 +78,7 @@ solution "BuildStaticLibs"
         targetdir "lib"
         buildoptions (buildOptions)
         includedirs (includeDirList)
-        files { "shared/cs488-framework/*.cpp" }
+        files { "shared/glframework/*.cpp" }
 
     -- Build imgui static library
     project "imgui"
@@ -116,6 +119,7 @@ solution "BuildStaticLibs"
         objdir "build"
         targetdir "."
         buildoptions (buildOptions)
+        linkoptions (linkOptions)
         libdirs (libDirectories)
         links (linkLibs)
         includedirs (includeDirList)

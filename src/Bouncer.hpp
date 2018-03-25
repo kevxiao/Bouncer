@@ -1,13 +1,14 @@
 #pragma once
 
-#include "cs488-framework/CS488Window.hpp"
-#include "cs488-framework/OpenGLImport.hpp"
-#include "cs488-framework/ShaderProgram.hpp"
-#include "cs488-framework/MeshConsolidator.hpp"
+#include "glframework/GlWindow.hpp"
+#include "glframework/OpenGLImport.hpp"
+#include "glframework/ShaderProgram.hpp"
+#include "glframework/MeshConsolidator.hpp"
+
+#include "irrKlang/irrKlang.h"
 
 #include "SceneNode.hpp"
 #include "GeometryNode.hpp"
-#include "JointNode.hpp"
 
 #include <glm/glm.hpp>
 #include <memory>
@@ -27,7 +28,7 @@ struct Keyframe{
     glm::vec3 position;
 };
 
-class Bouncer : public CS488Window {
+class Bouncer : public GlWindow {
 public:
     Bouncer(const std::string & arenaFile);
     virtual ~Bouncer();
@@ -103,7 +104,6 @@ protected:
     GLint m_normalAttribLocationTex;
     GLint m_texCoordsAttribLocation;
     GLuint m_arenaTextureData;
-    GLuint m_characterTextureData;
     ShaderProgram m_texShader;
 
     //-- GL resources for depth shader:
@@ -170,6 +170,9 @@ protected:
     unsigned int m_animElapsed;
     unsigned int m_animDuration;
     bool m_animPlay;
+
+    // sound engine
+    irrklang::ISoundEngine* m_soundEngine;
 
     std::mt19937 m_randomGenerator;
 };

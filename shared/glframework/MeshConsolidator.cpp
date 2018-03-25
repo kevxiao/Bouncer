@@ -2,8 +2,8 @@
 using namespace glm;
 using namespace std;
 
-#include "cs488-framework/Exception.hpp"
-#include "cs488-framework/ObjFileDecoder.hpp"
+#include "glframework/Exception.hpp"
+#include "glframework/ObjFileDecoder.hpp"
 
 #include <iostream>
 

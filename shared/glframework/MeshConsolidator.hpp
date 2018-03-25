@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cs488-framework/BatchInfo.hpp"
+#include "glframework/BatchInfo.hpp"
 
 #include <glm/glm.hpp>
 

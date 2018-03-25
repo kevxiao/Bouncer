@@ -49,7 +49,7 @@ float calcShadow(samplerCube sMap, vec3 fragPosition, vec3 lightPos)
     vec3 fragToLight = fragPosition - lightPos;
     float currentDepth = length(fragToLight);
     float shadow = 0.0;
-    float bias = 0.35;
+    float bias = 0.5;
     int samples = 20;
     float viewDistance = length(-fragPosition);
     float diskRadius = (1.0 + (viewDistance / farPlane)) / (0.25 * farPlane);

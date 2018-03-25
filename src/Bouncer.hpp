@@ -22,10 +22,9 @@ struct LightSource {
     glm::vec3 rgbIntensity;
 };
 
-struct Particle{
-    glm::mat4 model;
-    glm::vec3 motion;
-    float life;
+struct Keyframe{
+    unsigned int time;
+    glm::vec3 position;
 };
 
 class Bouncer : public CS488Window {
@@ -61,6 +60,7 @@ protected:
     void initPerspectiveMatrix();
     void initGameParams();
     void initPlayer();
+    void initAnimations();
     
     //-- Rendering methods:
     void uploadCommonSceneUniforms();
@@ -162,6 +162,14 @@ protected:
     float m_boost;
     bool m_inCollision;
     bool m_gamePaused;
+
+    // animation states
+    std::vector<glm::mat4> m_animPosOrig;
+    std::vector<std::vector<Keyframe> > m_keyframes;
+    std::vector<unsigned int> m_animIndex;
+    unsigned int m_animElapsed;
+    unsigned int m_animDuration;
+    bool m_animPlay;
 
     std::mt19937 m_randomGenerator;
 };

@@ -100,6 +100,8 @@ void Bouncer::init()
 
     initPlayer();
 
+    initAnimations();
+
     random_device rd;
     m_randomGenerator.seed(rd());
 }
@@ -553,6 +555,36 @@ void Bouncer::initPlayer() {
 }
 
 //----------------------------------------------------------------------------------------
+void Bouncer::initAnimations() {
+    m_animDuration = 2000;
+    m_animElapsed = 0;
+    m_animPlay = false;
+    std::vector<vec3> directions = {
+        vec3(1.0f, 0.0f, 0.0f),
+        vec3(-1.0f, 0.0f, 0.0f),
+        vec3(0.0f, 1.0f, 0.0f),
+        vec3(0.0f, -1.0f, 0.0f),
+        vec3(0.0f, 0.0f, 1.0f),
+        vec3(0.0f, 0.0f, -1.0f)
+    };
+    uint i = 0;
+    for (auto& el : m_playerNode->children.front()->children) {
+        vector<Keyframe> frames;
+        frames.push_back((Keyframe){0, vec3(0)});
+        frames.push_back((Keyframe){500, directions[i] * 5.0f});
+        frames.push_back((Keyframe){800, directions[i] * 2.0f});
+        frames.push_back((Keyframe){1200, directions[i] * 6.0f});
+        frames.push_back((Keyframe){1600, directions[i] * 4.0f});
+        frames.push_back((Keyframe){1800, directions[i] * 6.0f});
+        frames.push_back((Keyframe){2000, vec3(0)});
+        m_keyframes.push_back(frames);
+        m_animPosOrig.push_back(el->trans);
+        m_animIndex.push_back(0);
+        ++i;
+    }
+}
+
+//----------------------------------------------------------------------------------------
 void Bouncer::uploadCommonSceneUniforms() {
     vec3 ambientIntensity(0.33f);
     GLint location;
@@ -728,6 +760,32 @@ void Bouncer::appLogic()
                 m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 4.0f * (duration / moveScale));
                 m_particles[i] = m_particles[i] * scale(mat4(1), vec3(0.8, 0.8, 0.8));
             }
+        }
+    }
+    unsigned int i = 0;
+    if(m_animPlay) {
+        if(m_animElapsed < m_animDuration) {
+            for (auto& el : m_playerNode->children.front()->children) {
+                if(m_animElapsed >= m_keyframes[i][m_animIndex[i]].time) {
+                    ++m_animIndex[i];
+                }
+                if(m_animIndex[i] < m_keyframes[i].size()) {
+                    // calculate position between keyframes
+                    float inbetw = (float)(m_animElapsed - m_keyframes[i][m_animIndex[i] - 1].time) / (float)(m_keyframes[i][m_animIndex[i]].time - m_keyframes[i][m_animIndex[i] - 1].time);
+                    vec3 pos = m_keyframes[i][m_animIndex[i] - 1].position + (m_keyframes[i][m_animIndex[i]].position - m_keyframes[i][m_animIndex[i] - 1].position) * inbetw;
+                    el->trans = translate(m_animPosOrig[i], pos);
+                }
+                ++i;
+            }
+            m_animElapsed += duration;
+        } else {
+            for (auto& el : m_playerNode->children.front()->children) {
+                el->trans = m_animPosOrig[i];
+                m_animIndex[i] = 0;
+                ++i;
+            }
+            m_animElapsed = 0;
+            m_animPlay = false;
         }
     }
     movePlayer(duration);
@@ -1136,6 +1194,9 @@ bool Bouncer::keyInputEvent (
         }
         if (key == GLFW_KEY_LEFT_SHIFT) {
             m_boost = 2.0f;
+        }
+        if (key == GLFW_KEY_Z) {
+            m_animPlay = true;
         }
     }
 

@@ -1,11 +1,22 @@
 // ImGui - binary_to_compressed_c.cpp
-// Helper tool to turn a file into a C array.
-// The data is first compressed with stb_compress() to reduce source code size.
-// Then encoded in Base85 to fit in a string so we can fit roughly 4 bytes of compressed data into 5 bytes of source code (suggested by @mmalex)
-// (If we used 32-bits constants it would require take 11 bytes of source code to encode 4 bytes.)
-// Useful if you want to embed fonts into your code.
+// Helper tool to turn a file into a C array, if you want to embed font data in your source code.
+
+// The data is first compressed with stb_compress() to reduce source code size,
+// then encoded in Base85 to fit in a string so we can fit roughly 4 bytes of compressed data into 5 bytes of source code (suggested by @mmalex)
+// (If we used 32-bits constants it would require take 11 bytes of source code to encode 4 bytes, and be endianness dependent)
 // Note that even with compression, the output array is likely to be bigger than the binary file..
 // Load compressed TTF fonts with ImGui::GetIO().Fonts->AddFontFromMemoryCompressedTTF()
+
+// Build with, e.g:
+//   # cl.exe binary_to_compressed_c.cpp
+//   # gcc binary_to_compressed_c.cpp
+// You can also find a precompiled Windows binary in the binary/demo package available from https://github.com/ocornut/imgui
+
+// Usage:
+//   binary_to_compressed_c.exe [-base85] [-nocompress] <inputfile> <symbolname>
+// Usage example:
+//   # binary_to_compressed_c.exe myfont.ttf MyFont > myfont.cpp
+//   # binary_to_compressed_c.exe -base85 myfont.ttf MyFont > myfont.cpp
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
@@ -18,21 +29,23 @@ typedef unsigned int stb_uint;
 typedef unsigned char stb_uchar;
 stb_uint stb_compress(stb_uchar *out,stb_uchar *in,stb_uint len);
 
-static bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_base85_encoding);
+static bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_base85_encoding, bool use_compression);
 
 int main(int argc, char** argv)
 {
     if (argc < 3)
     {
-        printf("Syntax: %s [-base85] <inputfile> <symbolname>\n", argv[0]);
+        printf("Syntax: %s [-base85] [-nocompress] <inputfile> <symbolname>\n", argv[0]);
         return 0;
     }
 
     int argn = 1;
     bool use_base85_encoding = false;
+    bool use_compression = true;
     if (argv[argn][0] == '-')
     {
         if (strcmp(argv[argn], "-base85") == 0) { use_base85_encoding = true; argn++; }
+        else if (strcmp(argv[argn], "-nocompress") == 0) { use_compression = false; argn++; }
         else
         {
             printf("Unknown argument: '%s'\n", argv[argn]);
@@ -40,8 +53,7 @@ int main(int argc, char** argv)
         }
     }
 
-    binary_to_compressed_c(argv[argn], argv[argn+1], use_base85_encoding);
-    return 1;
+    return binary_to_compressed_c(argv[argn], argv[argn+1], use_base85_encoding, use_compression) ? 0 : 1;
 }
 
 char Encode85Byte(unsigned int x) 
@@ -50,7 +62,7 @@ char Encode85Byte(unsigned int x)
     return (x>='\\') ? x+1 : x;
 }
 
-bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_base85_encoding)
+bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_base85_encoding, bool use_compression)
 {
     // Read file
     FILE* f = fopen(filename, "rb");
@@ -64,31 +76,39 @@ bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_b
 
     // Compress
     int maxlen = data_sz + 512 + (data_sz >> 2) + sizeof(int); // total guess
-    char* compressed = new char[maxlen];
-    int compressed_sz = stb_compress((stb_uchar*)compressed, (stb_uchar*)data, data_sz);
-    memset(compressed + compressed_sz, 0, maxlen - compressed_sz);
+    char* compressed = use_compression ? new char[maxlen] : data;
+    int compressed_sz = use_compression ? stb_compress((stb_uchar*)compressed, (stb_uchar*)data, data_sz) : data_sz;
+    if (use_compression)
+		memset(compressed + compressed_sz, 0, maxlen - compressed_sz);
 
     // Output as Base85 encoded
     FILE* out = stdout;
     fprintf(out, "// File: '%s' (%d bytes)\n", filename, (int)data_sz);
     fprintf(out, "// Exported using binary_to_compressed_c.cpp\n");
+	const char* compressed_str = use_compression ? "compressed_" : "";
     if (use_base85_encoding)
     {
-        fprintf(out, "static const char %s_compressed_data_base85[%d+1] =\n    \"", symbol, (int)((compressed_sz+3)/4)*5);
-        int column = 0;
-        for (int i = 0; i < compressed_sz; i += 4)
+        fprintf(out, "static const char %s_%sdata_base85[%d+1] =\n    \"", symbol, compressed_str, (int)((compressed_sz+3)/4)*5);
+        char prev_c = 0;
+        for (int src_i = 0; src_i < compressed_sz; src_i += 4)
         {
-            unsigned int d = *(unsigned int*)(compressed + i);
-            fprintf(out, "%c%c%c%c%c", Encode85Byte(d), Encode85Byte(d/85), Encode85Byte(d/7225), Encode85Byte(d/614125), Encode85Byte(d/52200625));
-            if ((i % 112) == 112-4)
+            // This is made a little more complicated by the fact that ??X sequences are interpreted as trigraphs by old C/C++ compilers. So we need to escape pairs of ??.
+            unsigned int d = *(unsigned int*)(compressed + src_i);
+            for (unsigned int n5 = 0; n5 < 5; n5++, d /= 85)
+            {
+                char c = Encode85Byte(d);
+                fprintf(out, (c == '?' && prev_c == '?') ? "\\%c" : "%c", c);
+                prev_c = c;
+            }
+            if ((src_i % 112) == 112-4)
                 fprintf(out, "\"\n    \"");
         }
         fprintf(out, "\";\n\n");
     }
     else
     {
-        fprintf(out, "static const unsigned int %s_compressed_size = %d;\n", symbol, (int)compressed_sz);
-        fprintf(out, "static const unsigned int %s_compressed_data[%d/4] =\n{", symbol, (int)((compressed_sz+3)/4)*4);
+        fprintf(out, "static const unsigned int %s_%ssize = %d;\n", symbol, compressed_str, (int)compressed_sz);
+        fprintf(out, "static const unsigned int %s_%sdata[%d/4] =\n{", symbol, compressed_str, (int)((compressed_sz+3)/4)*4);
         int column = 0;
         for (int i = 0; i < compressed_sz; i += 4)
         {
@@ -103,7 +123,8 @@ bool binary_to_compressed_c(const char* filename, const char* symbol, bool use_b
 
     // Cleanup
     delete[] data;
-    delete[] compressed;
+    if (use_compression)
+	    delete[] compressed;
     return true;
 }
 
@@ -162,17 +183,12 @@ static void stb__write(unsigned char v)
     ++stb__outbytes;
 }
 
-#define stb_out(v)    (stb__out ? *stb__out++ = (stb_uchar) (v) : stb__write((stb_uchar) (v)))
+//#define stb_out(v)    (stb__out ? *stb__out++ = (stb_uchar) (v) : stb__write((stb_uchar) (v)))
+#define stb_out(v)    do { if (stb__out) *stb__out++ = (stb_uchar) (v); else stb__write((stb_uchar) (v)); } while (0)
 
-static void stb_out2(stb_uint v)
-{
-    stb_out(v >> 8);
-    stb_out(v);
-}
-
+static void stb_out2(stb_uint v) { stb_out(v >> 8); stb_out(v); }
 static void stb_out3(stb_uint v) { stb_out(v >> 16); stb_out(v >> 8); stb_out(v); }
-static void stb_out4(stb_uint v) { stb_out(v >> 24); stb_out(v >> 16);
-stb_out(v >> 8 ); stb_out(v);                  }
+static void stb_out4(stb_uint v) { stb_out(v >> 24); stb_out(v >> 16); stb_out(v >> 8 ); stb_out(v); }
 
 static void outliterals(stb_uchar *in, int numlit)
 {

@@ -8,6 +8,7 @@ using namespace std;
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <imgui/imgui.h>
+#include <imgui_impl_glfw_gl3.h>
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/io.hpp>
@@ -33,6 +34,7 @@ Bouncer::Bouncer(const std::string & arenaFile)
       m_lastMouseX(0.),
       m_lastMouseY(0.),
       m_gamePaused(true),
+      m_titleScreen(true),
       m_particleLife(0)
 {
 
@@ -51,6 +53,8 @@ Bouncer::~Bouncer()
  */
 void Bouncer::init()
 {
+    m_soundEngine = irrklang::createIrrKlangDevice();
+
     // Set the background colour.
     glClearColor(0.35, 0.35, 0.35, 1.0);
 
@@ -102,10 +106,10 @@ void Bouncer::init()
 
     initAnimations();
 
-    m_soundEngine = irrklang::createIrrKlangDevice();
-
     random_device rd;
     m_randomGenerator.seed(rd());
+
+    m_soundEngine->play2D(getAssetFilePath("ambient.mp3").c_str(), true);
 }
 
 //----------------------------------------------------------------------------------------
@@ -497,6 +501,16 @@ void Bouncer::initPerspectiveMatrix()
 void Bouncer::initViewMatrix() {
     m_view = glm::lookAt(vec3(0.0f, 0.0f, 20.0f), vec3(0.0f, 0.0f, 0.0f),
             vec3(0.0f, 1.0f, 0.0f));
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::initLightSources() {
+    // World-space position
+    m_light.position = vec3(0.0f, 49.0f, 0.0f);
+    m_light.rgbIntensity = vec3(0.8f); // White light
+
+    m_light2.position = vec3(0.0f, -49.0f, 0.0f);
+    m_light2.rgbIntensity = vec3(0.8f); // White light
 
     m_lightViews.push_back(glm::lookAt(m_light.position, m_light.position + glm::vec3( 1.0, 0.0, 0.0), glm::vec3(0.0,-1.0, 0.0)));
     m_lightViews.push_back(glm::lookAt(m_light.position, m_light.position + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0,-1.0, 0.0)));
@@ -514,23 +528,16 @@ void Bouncer::initViewMatrix() {
 }
 
 //----------------------------------------------------------------------------------------
-void Bouncer::initLightSources() {
-    // World-space position
-    m_light.position = vec3(0.0f, 49.0f, 0.0f);
-    m_light.rgbIntensity = vec3(0.8f); // White light
-
-    m_light2.position = vec3(0.0f, -49.0f, 0.0f);
-    m_light2.rgbIntensity = vec3(0.8f); // White light
-}
-
-//----------------------------------------------------------------------------------------
 void Bouncer::initGameParams() {
-    m_ballDir = vec3(1.0f);
+    uniform_real_distribution<float> dist(-1.0, 1.0);
+    m_ballDir = normalize(vec3(dist(m_randomGenerator), dist(m_randomGenerator), dist(m_randomGenerator)));
+    m_ballNode->trans = mat4(1);
     m_boost = 1.0f;
 }
 
 //----------------------------------------------------------------------------------------
 void Bouncer::initPlayer() {
+    m_playerNode->trans = mat4(1);
     m_playerNode->translate(vec3(0.0f, -1.0f, 15.0f));
 }
 
@@ -728,50 +735,55 @@ void Bouncer::appLogic()
 {
     auto now = chrono::high_resolution_clock::now();
     unsigned int duration = chrono::duration_cast<std::chrono::milliseconds>(now - m_prevTime).count();
-    m_prevTime = now;
-    if (m_particleLife > 0) {
-        m_particleLife -= duration;
-        if (m_particleLife <= 0) {
-            m_particles.clear();
-            m_particlesMotion.clear();
-        } else {
-            const float moveScale = 100.0;
-            for (unsigned int i = 0; i < m_particles.size(); ++i) {
-                m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 4.0f * (duration / moveScale));
-                m_particles[i] = m_particles[i] * scale(mat4(1), vec3(0.8, 0.8, 0.8));
+    if(!m_gamePaused) {
+        if (m_particleLife > 0) {
+            m_particleLife -= duration;
+            if (m_particleLife <= 0) {
+                m_particles.clear();
+                m_particlesMotion.clear();
+            } else {
+                const float moveScale = 100.0;
+                for (unsigned int i = 0; i < m_particles.size(); ++i) {
+                    m_particles[i] = translate(m_particles[i], m_particlesMotion[i] * 4.0f * (duration / moveScale));
+                    m_particles[i] = m_particles[i] * scale(mat4(1), vec3(0.8, 0.8, 0.8));
+                }
             }
         }
-    }
-    unsigned int i = 0;
-    if(m_animPlay) {
-        if(m_animElapsed < m_animDuration) {
-            for (auto& el : m_playerNode->children.front()->children) {
-                if(m_animElapsed >= m_keyframes[i][m_animIndex[i]].time) {
-                    ++m_animIndex[i];
+        unsigned int i = 0;
+        if(m_animPlay) {
+            if(m_animElapsed < m_animDuration) {
+                for (auto& el : m_playerNode->children.front()->children) {
+                    if(m_animElapsed >= m_keyframes[i][m_animIndex[i]].time) {
+                        ++m_animIndex[i];
+                    }
+                    if(m_animIndex[i] < m_keyframes[i].size()) {
+                        // calculate position between keyframes
+                        float inbetw = (float)(m_animElapsed - m_keyframes[i][m_animIndex[i] - 1].time) / (float)(m_keyframes[i][m_animIndex[i]].time - m_keyframes[i][m_animIndex[i] - 1].time);
+                        vec3 pos = m_keyframes[i][m_animIndex[i] - 1].position + (m_keyframes[i][m_animIndex[i]].position - m_keyframes[i][m_animIndex[i] - 1].position) * inbetw;
+                        el->trans = translate(m_animPosOrig[i], pos);
+                    }
+                    ++i;
                 }
-                if(m_animIndex[i] < m_keyframes[i].size()) {
-                    // calculate position between keyframes
-                    float inbetw = (float)(m_animElapsed - m_keyframes[i][m_animIndex[i] - 1].time) / (float)(m_keyframes[i][m_animIndex[i]].time - m_keyframes[i][m_animIndex[i] - 1].time);
-                    vec3 pos = m_keyframes[i][m_animIndex[i] - 1].position + (m_keyframes[i][m_animIndex[i]].position - m_keyframes[i][m_animIndex[i] - 1].position) * inbetw;
-                    el->trans = translate(m_animPosOrig[i], pos);
+                m_animElapsed += duration;
+            } else {
+                for (auto& el : m_playerNode->children.front()->children) {
+                    el->trans = m_animPosOrig[i];
+                    m_animIndex[i] = 0;
+                    ++i;
                 }
-                ++i;
+                m_animElapsed = 0;
+                m_animPlay = false;
             }
-            m_animElapsed += duration;
-        } else {
-            for (auto& el : m_playerNode->children.front()->children) {
-                el->trans = m_animPosOrig[i];
-                m_animIndex[i] = 0;
-                ++i;
-            }
-            m_animElapsed = 0;
-            m_animPlay = false;
         }
+        if(m_boost > 1.0f + EPSILON && (chrono::duration_cast<std::chrono::milliseconds>(m_prevTime.time_since_epoch()).count() % 500 > chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 500)) {
+            m_soundEngine->play2D(getAssetFilePath("swoosh.wav").c_str(), false);
+        }
+        movePlayer(duration);
+        moveBall(duration);
     }
-    movePlayer(duration);
-    moveBall(duration);
 
     uploadCommonSceneUniforms();
+    m_prevTime = now;
 }
 
 //----------------------------------------------------------------------------------------
@@ -780,29 +792,55 @@ void Bouncer::appLogic()
  */
 void Bouncer::guiLogic()
 {
-    // static bool firstRun(true);
-    // if (firstRun) {
-    //     ImGui::SetNextWindowPos(ImVec2(50, 50));
-    //     firstRun = false;
-    // }
+    ImGui_ImplGlfwGL3_NewFrame();
 
-    // static bool showDebugWindow(true);
-    // ImGuiWindowFlags windowFlags(ImGuiWindowFlags_AlwaysAutoResize);
-    // float opacity(0.5f);
+    static bool firstRun(true);
+    if (firstRun) {
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        firstRun = false;
+    }
 
-    // ImGui::Begin("Properties", &showDebugWindow, ImVec2(100,100), opacity,
-    //         windowFlags);
+    static bool showUIWindow(true);
+    ImGuiWindowFlags windowFlags(ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
 
-    //     if( ImGui::RadioButton("Position / Orientation (P)", !m_jointInteract) ) {
-    //         m_jointInteract = false;
-    //     }
-    //     if( ImGui::RadioButton("Joints (J)", m_jointInteract) ) {
-    //         m_jointInteract = true;
-    //     }
+    ImGui::SetWindowSize("Window", ImVec2(0, 0));
+    ImGui::SetWindowSize("Window", ImVec2(m_windowWidth, m_windowHeight));
+    ImGui::Begin("Window", &showUIWindow, ImVec2(m_windowWidth, m_windowHeight), 0.0f, windowFlags);
 
-    //     ImGui::Text( "Framerate: %.1f FPS", ImGui::GetIO().Framerate );
+        ImVec2 pos = ImGui::GetCursorPos();
+        pos.x = m_windowWidth - 60;
+        pos.y = m_windowHeight - 30;
+        ImGui::SetCursorPos(pos);
+        ImGui::Text( "%.0f FPS", ImGui::GetIO().Framerate );
 
-    // ImGui::End();
+        if(m_titleScreen) {
+            pos = ImGui::GetCursorPos();
+            pos.x = (m_windowWidth / 2) - 50;
+            pos.y = (m_windowHeight / 3) - 10;
+            ImGui::SetCursorPos(pos);
+            ImGui::Text("B O U N C E R");
+
+            pos = ImGui::GetCursorPos();
+            pos.x = (m_windowWidth / 2) - 100;
+            pos.y = (2 * m_windowHeight / 3) - 50;
+            ImGui::SetCursorPos(pos);
+            if( ImGui::Button("Play!", ImVec2(200, 100)) ) {
+                m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
+                startGame();
+            }
+        } else if (m_gamePaused) {
+            pos = ImGui::GetCursorPos();
+            pos.x = (m_windowWidth / 2) - 70;
+            pos.y = (2 * m_windowHeight / 3) - 35;
+            ImGui::SetCursorPos(pos);
+            if( ImGui::Button("Resume", ImVec2(140, 70)) ) {
+                m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
+                m_gamePaused = false;
+                glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+            }
+        }
+
+    ImGui::End();
 }
 
 //----------------------------------------------------------------------------------------
@@ -1143,6 +1181,7 @@ bool Bouncer::keyInputEvent (
         }
         // gimme mouse back
         if (key == GLFW_KEY_P) {
+            m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
             m_gamePaused = !m_gamePaused;
             m_keyUp = false;
             m_keyDown = false;
@@ -1151,7 +1190,18 @@ bool Bouncer::keyInputEvent (
             m_keyForward = false;
             glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
             glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
+            if(m_titleScreen) {
+                startGame();
+            }
             eventHandled = true;
+        }
+
+        if (key == GLFW_KEY_R) {
+            m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
+            startGame();
+            m_titleScreen = true;
+            m_gamePaused = true;
+            glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
         }
     }
 
@@ -1174,6 +1224,7 @@ bool Bouncer::keyInputEvent (
         }
         if (key == GLFW_KEY_LEFT_SHIFT) {
             m_boost = 2.0f;
+            m_soundEngine->play2D(getAssetFilePath("swoosh.wav").c_str(), false);
         }
         if (key == GLFW_KEY_Z) {
             m_animPlay = true;
@@ -1207,10 +1258,6 @@ bool Bouncer::keyInputEvent (
 
 void Bouncer::movePlayer(unsigned int time)
 {
-    if (m_gamePaused) {
-        return;
-    }
-
     const float moveScale = 100.0;
     float moveX = 0., moveY = 0., moveZ = 0.;
     if(m_keyUp) {
@@ -1247,9 +1294,6 @@ void Bouncer::movePlayer(unsigned int time)
 
 void Bouncer::moveBall(unsigned int time)
 {
-    if (m_gamePaused) {
-        return;
-    }
     const float moveScale = 100.0;
     if(ballCollision()){
         // particle response
@@ -1310,4 +1354,19 @@ bool Bouncer::playerCollision()
         collision = true;
     }
     return collision;
+}
+
+void Bouncer::startGame() {
+    m_gamePaused = false;
+    m_titleScreen = false;
+    m_keyUp = false;
+    m_keyDown = false;
+    m_keyLeft = false;
+    m_keyRight = false;
+    m_keyForward = false;
+    glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+    glfwGetCursorPos(m_window, &m_lastMouseX, &m_lastMouseY);
+    initGameParams();
+    initPlayer();
+    initViewMatrix();
 }

@@ -76,6 +76,7 @@ protected:
     void moveBall(unsigned int time);
     bool playerCollision();
     bool ballCollision();
+    void startGame();
 
     glm::mat4 m_perpsective;
     glm::mat4 m_view;
@@ -173,6 +174,8 @@ protected:
 
     // sound engine
     irrklang::ISoundEngine* m_soundEngine;
+
+    bool m_titleScreen;
 
     std::mt19937 m_randomGenerator;
 };

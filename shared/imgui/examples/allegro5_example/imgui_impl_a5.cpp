@@ -1,4 +1,12 @@
 // ImGui Allegro 5 bindings
+// In this binding, ImTextureID is used to store a 'ALLEGRO_BITMAP*' texture identifier. Read the FAQ about ImTextureID in imgui.cpp.
+
+// TODO:
+// - Clipboard is not supported.
+
+// You can copy and use unmodified imgui_impl_* files in your project. See main.cpp for an example of using this.
+// If you use this binding you'll need to call 4 functions: ImGui_ImplXXXX_Init(), ImGui_ImplXXXX_NewFrame(), ImGui::Render() and ImGui_ImplXXXX_Shutdown().
+// If you are new to ImGui, see examples/README.txt and documentation at the top of imgui.cpp.
 // https://github.com/ocornut/imgui
 // by @birthggd
 
@@ -35,14 +43,14 @@ void ImGui_ImplA5_RenderDrawLists(ImDrawData* draw_data)
     al_get_blender(&op, &src, &dst);
     al_set_blender(ALLEGRO_ADD, ALLEGRO_ALPHA, ALLEGRO_INVERSE_ALPHA);
 
-    for (int n = 0; n < draw_data->CmdListsCount; n++) 
+    for (int n = 0; n < draw_data->CmdListsCount; n++)
     {
         const ImDrawList* cmd_list = draw_data->CmdLists[n];
 
         // FIXME-OPT: Unfortunately Allegro doesn't support 32-bits packed colors so we have to convert them to 4 floats
         static ImVector<ImDrawVertAllegro> vertices;
-        vertices.resize(cmd_list->VtxBuffer.size());
-        for (int i = 0; i < cmd_list->VtxBuffer.size(); ++i) 
+        vertices.resize(cmd_list->VtxBuffer.Size);
+        for (int i = 0; i < cmd_list->VtxBuffer.Size; ++i)
         {
             const ImDrawVert &dv = cmd_list->VtxBuffer[i];
             ImDrawVertAllegro v;
@@ -53,21 +61,22 @@ void ImGui_ImplA5_RenderDrawLists(ImDrawData* draw_data)
             vertices[i] = v;
         }
 
-        // FIXME-OPT: Unfortunately Allegro doesn't support 16-bit vertices
+        // FIXME-OPT: Unfortunately Allegro doesn't support 16-bit indices
+        // You can also use '#define ImDrawIdx unsigned int' in imconfig.h and request ImGui to output 32-bit indices
         static ImVector<int> indices;
-        indices.resize(cmd_list->IdxBuffer.size());
-        for (int i = 0; i < cmd_list->IdxBuffer.size(); ++i) 
+        indices.resize(cmd_list->IdxBuffer.Size);
+        for (int i = 0; i < cmd_list->IdxBuffer.Size; ++i)
             indices[i] = (int)cmd_list->IdxBuffer.Data[i];
 
         int idx_offset = 0;
-        for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.size(); cmd_i++) 
+        for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
         {
             const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
-            if (pcmd->UserCallback) 
+            if (pcmd->UserCallback)
             {
                 pcmd->UserCallback(cmd_list, pcmd);
             }
-            else 
+            else
             {
                 ALLEGRO_BITMAP* texture = (ALLEGRO_BITMAP*)pcmd->TextureId;
                 al_set_clipping_rectangle(pcmd->ClipRect.x, pcmd->ClipRect.y, pcmd->ClipRect.z-pcmd->ClipRect.x, pcmd->ClipRect.w-pcmd->ClipRect.y);
@@ -84,9 +93,8 @@ void ImGui_ImplA5_RenderDrawLists(ImDrawData* draw_data)
 
 bool Imgui_ImplA5_CreateDeviceObjects()
 {
+    // Build texture atlas
     ImGuiIO &io = ImGui::GetIO();
-
-    // Build texture
     unsigned char *pixels;
     int width, height;
     io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
@@ -99,11 +107,11 @@ bool Imgui_ImplA5_CreateDeviceObjects()
     ALLEGRO_BITMAP* img = al_create_bitmap(width, height);
     al_set_new_bitmap_flags(flags);
     al_set_new_bitmap_format(fmt);
-    if (!img) 
+    if (!img)
         return false;
 
     ALLEGRO_LOCKED_REGION *locked_img = al_lock_bitmap(img, al_get_bitmap_format(img), ALLEGRO_LOCK_WRITEONLY);
-    if (!locked_img) 
+    if (!locked_img)
     {
         al_destroy_bitmap(img);
         return false;
@@ -114,16 +122,12 @@ bool Imgui_ImplA5_CreateDeviceObjects()
     // Convert software texture to hardware texture.
     ALLEGRO_BITMAP* cloned_img = al_clone_bitmap(img);
     al_destroy_bitmap(img);
-    if (!cloned_img) 
+    if (!cloned_img)
         return false;
 
     // Store our identifier
     io.Fonts->TexID = (void*)cloned_img;
     g_Texture = cloned_img;
-
-    // Cleanup (don't clear the input data if you want to append new fonts later)
-    io.Fonts->ClearInputData();
-    io.Fonts->ClearTexData();
 
     // Create an invisible mouse cursor
     // Because al_hide_mouse_cursor() seems to mess up with the actual inputs..
@@ -136,7 +140,7 @@ bool Imgui_ImplA5_CreateDeviceObjects()
 
 void ImGui_ImplA5_InvalidateDeviceObjects()
 {
-    if (g_Texture) 
+    if (g_Texture)
     {
         al_destroy_bitmap(g_Texture);
         ImGui::GetIO().Fonts->TexID = NULL;
@@ -152,11 +156,11 @@ void ImGui_ImplA5_InvalidateDeviceObjects()
 bool ImGui_ImplA5_Init(ALLEGRO_DISPLAY* display)
 {
     g_Display = display;
-   
-    // Create custom vertex declaration. 
+
+    // Create custom vertex declaration.
     // Unfortunately Allegro doesn't support 32-bits packed colors so we have to convert them to 4 floats.
     // We still use a custom declaration to use 'ALLEGRO_PRIM_TEX_COORD' instead of 'ALLEGRO_PRIM_TEX_COORD_PIXEL' else we can't do a reliable conversion.
-    ALLEGRO_VERTEX_ELEMENT elems[] = 
+    ALLEGRO_VERTEX_ELEMENT elems[] =
     {
         { ALLEGRO_PRIM_POSITION, ALLEGRO_PRIM_FLOAT_2, OFFSETOF(ImDrawVertAllegro, pos) },
         { ALLEGRO_PRIM_TEX_COORD, ALLEGRO_PRIM_FLOAT_2, OFFSETOF(ImDrawVertAllegro, uv) },
@@ -200,17 +204,21 @@ void ImGui_ImplA5_Shutdown()
     ImGui::Shutdown();
 }
 
+// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
+// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
+// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application.
+// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
 bool ImGui_ImplA5_ProcessEvent(ALLEGRO_EVENT *ev)
 {
     ImGuiIO &io = ImGui::GetIO();
 
-    switch (ev->type) 
+    switch (ev->type)
     {
     case ALLEGRO_EVENT_MOUSE_AXES:
         io.MouseWheel += ev->mouse.dz;
         return true;
     case ALLEGRO_EVENT_KEY_CHAR:
-        if (ev->keyboard.display == g_Display) 
+        if (ev->keyboard.display == g_Display)
             if (ev->keyboard.unichar > 0 && ev->keyboard.unichar < 0x10000)
                 io.AddInputCharacter((unsigned short)ev->keyboard.unichar);
         return true;
@@ -223,10 +231,9 @@ bool ImGui_ImplA5_ProcessEvent(ALLEGRO_EVENT *ev)
     return false;
 }
 
-
 void ImGui_ImplA5_NewFrame()
 {
-    if (!g_Texture) 
+    if (!g_Texture)
         Imgui_ImplA5_CreateDeviceObjects();
 
     ImGuiIO &io = ImGui::GetIO();
@@ -248,16 +255,17 @@ void ImGui_ImplA5_NewFrame()
     io.KeyCtrl = al_key_down(&keys, ALLEGRO_KEY_LCTRL) || al_key_down(&keys, ALLEGRO_KEY_RCTRL);
     io.KeyShift = al_key_down(&keys, ALLEGRO_KEY_LSHIFT) || al_key_down(&keys, ALLEGRO_KEY_RSHIFT);
     io.KeyAlt = al_key_down(&keys, ALLEGRO_KEY_ALT) || al_key_down(&keys, ALLEGRO_KEY_ALTGR);
+    io.KeySuper = al_key_down(&keys, ALLEGRO_KEY_LWIN) || al_key_down(&keys, ALLEGRO_KEY_RWIN);
 
     ALLEGRO_MOUSE_STATE mouse;
-    if (keys.display == g_Display) 
+    if (keys.display == g_Display)
     {
         al_get_mouse_state(&mouse);
         io.MousePos = ImVec2((float)mouse.x, (float)mouse.y);
     }
-    else 
+    else
     {
-        io.MousePos = ImVec2(-1, -1);
+        io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
     }
 
     al_get_mouse_state(&mouse);
@@ -285,6 +293,6 @@ void ImGui_ImplA5_NewFrame()
         al_set_system_mouse_cursor(g_Display, cursor_id);
     }
 
-    // Start the frame
+    // Start the frame. This call will update the io.WantCaptureMouse, io.WantCaptureKeyboard flag that you can use to dispatch inputs (or not) to your application.
     ImGui::NewFrame();
 }

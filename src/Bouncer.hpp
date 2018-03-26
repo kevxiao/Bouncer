@@ -56,6 +56,7 @@ protected:
     void mapVboDataToVertexShaderInputLocations();
     void mapTextures();
     void initShadowMap(GLuint width, GLuint height);
+    void initDepthMap();
     void initViewMatrix();
     void initLightSources();
     void initPerspectiveMatrix();
@@ -88,19 +89,20 @@ protected:
     std::vector<glm::mat4> m_lightViews;
     std::vector<glm::mat4> m_lightViews2;
 
-    //-- GL resources for shader:
-    GLuint m_vao_meshData;
+    //-- GL buffer objects
     GLuint m_vbo_vertexPositions;
     GLuint m_vbo_vertexNormals;
+    GLuint m_vbo_vertexTexCoords;
+    GLuint m_vbo_modelIns;
+
+    //-- GL resources for shader:
+    GLuint m_vao_meshData;
     GLint m_positionAttribLocation;
     GLint m_normalAttribLocation;
     ShaderProgram m_shader;
 
     //-- GL resources for texture shader:
     GLuint m_vao_meshDataTex;
-    GLuint m_vbo_vertexPositionsTex;
-    GLuint m_vbo_vertexNormalsTex;
-    GLuint m_vbo_vertexTexCoords;
     GLint m_positionAttribLocationTex;
     GLint m_normalAttribLocationTex;
     GLint m_texCoordsAttribLocation;
@@ -109,7 +111,6 @@ protected:
 
     //-- GL resources for depth shader:
     GLuint m_vao_meshDataDepth;
-    GLuint m_vbo_vertexPositionsDepth;
     GLint m_positionAttribLocationDepth;
     GLuint m_fbo_depthMap;
     GLuint m_depthMapTex;
@@ -117,7 +118,6 @@ protected:
 
     //-- GL resources for depth shader 2:
     GLuint m_vao_meshDataDepth2;
-    GLuint m_vbo_vertexPositionsDepth2;
     GLint m_positionAttribLocationDepth2;
     GLuint m_fbo_depthMap2;
     GLuint m_depthMapTex2;
@@ -125,11 +125,16 @@ protected:
 
     //-- GL resources for instanced shader:
     GLuint m_vao_meshDataIns;
-    GLuint m_vbo_positionsIns;
-    GLuint m_vbo_modelIns;
     GLint m_positionAttribLocationIns;
     GLint m_modelAttribLocationIns;
     ShaderProgram m_instancedShader;
+
+    //-- GL resources for motion blur depth shader:
+    GLuint m_vao_meshDataMot;
+    GLint m_positionAttribLocationMot;
+    GLuint m_fbo_depthMapMot;
+    GLuint m_depthMapTexMot;
+    ShaderProgram m_motionDepthShader;
 
     //-- Particles
     std::vector<glm::mat4> m_particles;

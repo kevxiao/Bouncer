@@ -1,4 +1,5 @@
 #include "GlWindow.hpp"
+#include "GlErrorCheck.hpp"
 #include "glframework/Exception.hpp"
 #include "glframework/OpenGLImport.hpp"
 
@@ -418,7 +419,6 @@ void GlWindow::run (
 				// Finally, blast everything to the screen.
                 glfwSwapBuffers(m_window);
             }
-
         }
         
     } catch (const  std::exception & e) {

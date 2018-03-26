@@ -90,6 +90,8 @@ void Bouncer::init()
 
     initShadowMap(SHADOW_WIDTH, SHADOW_HEIGHT);
 
+    initDepthMap();
+
     initLightSources();
 
     initPerspectiveMatrix();
@@ -149,6 +151,11 @@ void Bouncer::createShaderProgram()
     m_instancedShader.attachVertexShader( getShaderFilePath("InstancedVertexShader.vs").c_str() );
     m_instancedShader.attachFragmentShader( getShaderFilePath("InstancedFragmentShader.fs").c_str() );
     m_instancedShader.link();
+
+    m_motionDepthShader.generateProgramObject();
+    m_motionDepthShader.attachVertexShader( getShaderFilePath("MotionDepthVertexShader.vs").c_str() );
+    m_motionDepthShader.attachFragmentShader( getShaderFilePath("MotionDepthFragmentShader.fs").c_str() );
+    m_motionDepthShader.link();
 }
 
 //----------------------------------------------------------------------------------------
@@ -233,6 +240,18 @@ void Bouncer::enableVertexShaderInputSlots()
         CHECK_GL_ERRORS;
     }
 
+    //-- Enable input slots for m_vao_meshDataMot:
+    {
+        glGenVertexArrays(1, &m_vao_meshDataMot);
+        glBindVertexArray(m_vao_meshDataMot);
+
+        // Enable the vertex shader attribute location for "position" when rendering.
+        m_positionAttribLocationMot = m_motionDepthShader.getAttribLocation("position");
+        glEnableVertexAttribArray(m_positionAttribLocationDepth2);
+
+        CHECK_GL_ERRORS;
+    }
+
     // Restore defaults
     glBindVertexArray(0);
 }
@@ -267,32 +286,6 @@ void Bouncer::uploadVertexDataToVbos (
         CHECK_GL_ERRORS;
     }
 
-    // Generate VBO to store all vertex position data
-    {
-        glGenBuffers(1, &m_vbo_vertexPositionsTex);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsTex);
-
-        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
-                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        CHECK_GL_ERRORS;
-    }
-
-    // Generate VBO to store all vertex normal data
-    {
-        glGenBuffers(1, &m_vbo_vertexNormalsTex);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexNormalsTex);
-
-        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexNormalBytes(),
-                meshConsolidator.getVertexNormalDataPtr(), GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        CHECK_GL_ERRORS;
-    }
-
     // Generate VBO to store all texture coord data
     {
         glGenBuffers(1, &m_vbo_vertexTexCoords);
@@ -306,44 +299,6 @@ void Bouncer::uploadVertexDataToVbos (
         CHECK_GL_ERRORS;
     }
 
-    // Generate VBO to store all vertex position data
-    {
-        glGenBuffers(1, &m_vbo_vertexPositionsDepth);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth);
-
-        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
-                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        CHECK_GL_ERRORS;
-    }
-
-    // Generate VBO to store all vertex position data
-    {
-        glGenBuffers(1, &m_vbo_vertexPositionsDepth2);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth2);
-
-        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
-                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        CHECK_GL_ERRORS;
-    }
-
-    // Generate VBO to store all vertex position data
-    {
-        glGenBuffers(1, &m_vbo_positionsIns);
-
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_positionsIns);
-
-        glBufferData(GL_ARRAY_BUFFER, meshConsolidator.getNumVertexPositionBytes(),
-                meshConsolidator.getVertexPositionDataPtr(), GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        CHECK_GL_ERRORS;
-    }
 
     // Generate VBO to store all particle model matrices
     {
@@ -373,10 +328,10 @@ void Bouncer::mapVboDataToVertexShaderInputLocations()
     // Bind VAO in order to record the data mapping.
     glBindVertexArray(m_vao_meshDataTex);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsTex);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
     glVertexAttribPointer(m_positionAttribLocationTex, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexNormalsTex);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexNormals);
     glVertexAttribPointer(m_normalAttribLocationTex, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexTexCoords);
@@ -385,19 +340,19 @@ void Bouncer::mapVboDataToVertexShaderInputLocations()
     // Bind VAO in order to record the data mapping.
     glBindVertexArray(m_vao_meshDataDepth);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
     glVertexAttribPointer(m_positionAttribLocationDepth, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // Bind VAO in order to record the data mapping.
     glBindVertexArray(m_vao_meshDataDepth2);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositionsDepth2);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
     glVertexAttribPointer(m_positionAttribLocationDepth2, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     // Bind VAO in order to record the data mapping.
     glBindVertexArray(m_vao_meshDataIns);
 
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_positionsIns);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
     glVertexAttribPointer(m_positionAttribLocationIns, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     auto v4size = sizeof(vec4);
@@ -411,6 +366,12 @@ void Bouncer::mapVboDataToVertexShaderInputLocations()
     glVertexAttribDivisor(m_modelAttribLocationIns + 1, 1);
     glVertexAttribDivisor(m_modelAttribLocationIns + 2, 1);
     glVertexAttribDivisor(m_modelAttribLocationIns + 3, 1);
+
+    // Bind VAO in order to record the data mapping.
+    glBindVertexArray(m_vao_meshDataMot);
+
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
+    glVertexAttribPointer(m_positionAttribLocationMot, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
     //-- Unbind target, and restore default values:
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -467,6 +428,7 @@ void Bouncer::initShadowMap(GLuint width, GLuint height)
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    CHECK_GL_ERRORS;
 
     // depth map for light 2
     glGenFramebuffers(1, &m_fbo_depthMap2);
@@ -484,6 +446,27 @@ void Bouncer::initShadowMap(GLuint width, GLuint height)
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    CHECK_GL_ERRORS;
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::initDepthMap()
+{
+    // depth map for motion blur
+    glGenFramebuffers(1, &m_fbo_depthMapMot);
+    glGenTextures(1, &m_depthMapTexMot);
+    glBindTexture(GL_TEXTURE_2D, m_depthMapTexMot);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, m_windowWidth, m_windowHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); 
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMapMot);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthMapTexMot, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    CHECK_GL_ERRORS;
 }
 
 //----------------------------------------------------------------------------------------
@@ -725,6 +708,15 @@ void Bouncer::uploadCommonSceneUniforms() {
         glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_perpsective));
     }
     m_instancedShader.disable();
+
+    m_motionDepthShader.enable();
+    {
+        //-- Set Perpsective matrix uniform for the scene:
+        location = m_motionDepthShader.getUniformLocation("Perspective");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_perpsective));
+        CHECK_GL_ERRORS;
+    }
+    m_motionDepthShader.disable();
 }
 
 //----------------------------------------------------------------------------------------
@@ -931,6 +923,20 @@ void Bouncer::updateShaderUniforms(
         CHECK_GL_ERRORS;
     }
     m_depthShader2.disable();
+
+    m_motionDepthShader.enable();
+    {
+        //-- Set Model matrix:
+        location = m_motionDepthShader.getUniformLocation("Model");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(trans));
+        CHECK_GL_ERRORS;
+
+        //-- Set View matrix:
+        location = m_motionDepthShader.getUniformLocation("View");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_view));
+        CHECK_GL_ERRORS;
+    }
+    m_motionDepthShader.disable();
 }
 
 //----------------------------------------------------------------------------------------
@@ -938,18 +944,25 @@ void Bouncer::updateShaderUniforms(
  * Called once per frame, after guiLogic().
  */
 void Bouncer::draw() {
-    // render to depth map
+    // render to shadow map
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMap);
     glClear(GL_DEPTH_BUFFER_BIT);
     renderSceneDepth(m_depthShader, m_vao_meshDataDepth);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // render to depth map
+    // render to shadow map 2
     glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMap2);
     glClear(GL_DEPTH_BUFFER_BIT);
     renderSceneDepth(m_depthShader2, m_vao_meshDataDepth2);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // render to motion blur depth map
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_depthMapMot);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    renderSceneDepth(m_motionDepthShader, m_vao_meshDataMot);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // render to display

@@ -61,9 +61,7 @@ MeshConsolidator::MeshConsolidator(
 		    throw Exception("Error within MeshConsolidator: "
 					"positions.size() != uvCoords.size()\n");
 	    }
-
-	    cout << meshId << endl;
-
+	    
 	    batchInfo.startIndex = indexOffset;
 	    batchInfo.numIndices = numIndices;
 

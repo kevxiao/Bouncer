@@ -57,6 +57,7 @@ protected:
     void mapTextures();
     void initShadowMap(GLuint width, GLuint height);
     void initDepthMap();
+    void initPostProcessFb();
     void initViewMatrix();
     void initLightSources();
     void initPerspectiveMatrix();
@@ -81,6 +82,8 @@ protected:
 
     glm::mat4 m_perpsective;
     glm::mat4 m_view;
+    glm::mat4 m_perpsectivePrev;
+    glm::mat4 m_viewPrev;
     GLfloat m_farPlane;
 
     LightSource m_light;
@@ -94,6 +97,10 @@ protected:
     GLuint m_vbo_vertexNormals;
     GLuint m_vbo_vertexTexCoords;
     GLuint m_vbo_modelIns;
+    GLuint m_vbo_screenVertex;
+    GLuint m_fbo_screen;
+    GLuint m_rbo_screen;
+    GLuint m_screenTex;
 
     //-- GL resources for shader:
     GLuint m_vao_meshData;
@@ -135,6 +142,12 @@ protected:
     GLuint m_fbo_depthMapMot;
     GLuint m_depthMapTexMot;
     ShaderProgram m_motionDepthShader;
+
+    //-- GL resources for postprocess shader:
+    GLuint m_vao_screenQuad;
+    GLint m_positionAttribLocationPost;
+    GLint m_texCoordsAttribLocationPost;
+    ShaderProgram m_postProcessShader;
 
     //-- Particles
     std::vector<glm::mat4> m_particles;
@@ -181,6 +194,7 @@ protected:
     irrklang::ISoundEngine* m_soundEngine;
 
     bool m_titleScreen;
+    bool m_showFps;
 
     std::mt19937 m_randomGenerator;
 };

@@ -35,6 +35,7 @@ Bouncer::Bouncer(const std::string & arenaFile)
       m_lastMouseY(0.),
       m_gamePaused(true),
       m_titleScreen(true),
+      m_showFps(false),
       m_particleLife(0)
 {
 
@@ -91,6 +92,8 @@ void Bouncer::init()
     initShadowMap(SHADOW_WIDTH, SHADOW_HEIGHT);
 
     initDepthMap();
+
+    initPostProcessFb();
 
     initLightSources();
 
@@ -156,6 +159,11 @@ void Bouncer::createShaderProgram()
     m_motionDepthShader.attachVertexShader( getShaderFilePath("MotionDepthVertexShader.vs").c_str() );
     m_motionDepthShader.attachFragmentShader( getShaderFilePath("MotionDepthFragmentShader.fs").c_str() );
     m_motionDepthShader.link();
+
+    m_postProcessShader.generateProgramObject();
+    m_postProcessShader.attachVertexShader( getShaderFilePath("PostProcessVertexShader.vs").c_str() );
+    m_postProcessShader.attachFragmentShader( getShaderFilePath("PostProcessFragmentShader.fs").c_str() );
+    m_postProcessShader.link();
 }
 
 //----------------------------------------------------------------------------------------
@@ -190,7 +198,7 @@ void Bouncer::enableVertexShaderInputSlots()
         m_normalAttribLocationTex = m_texShader.getAttribLocation("normal");
         glEnableVertexAttribArray(m_normalAttribLocationTex);
 
-        // Enable the vertex shader attribute location for "normal" when rendering.
+        // Enable the vertex shader attribute location for "texcoord_in" when rendering.
         m_texCoordsAttribLocation = m_texShader.getAttribLocation("texcoord_in");
         glEnableVertexAttribArray(m_texCoordsAttribLocation);
 
@@ -247,7 +255,23 @@ void Bouncer::enableVertexShaderInputSlots()
 
         // Enable the vertex shader attribute location for "position" when rendering.
         m_positionAttribLocationMot = m_motionDepthShader.getAttribLocation("position");
-        glEnableVertexAttribArray(m_positionAttribLocationDepth2);
+        glEnableVertexAttribArray(m_positionAttribLocationMot);
+
+        CHECK_GL_ERRORS;
+    }
+
+    //-- Enable input slots for m_vao_screenQuad:
+    {
+        glGenVertexArrays(1, &m_vao_screenQuad);
+        glBindVertexArray(m_vao_screenQuad);
+
+        // Enable the vertex shader attribute location for "position" when rendering.
+        m_positionAttribLocationPost = m_postProcessShader.getAttribLocation("position");
+        glEnableVertexAttribArray(m_positionAttribLocationPost);
+
+        // Enable the vertex shader attribute location for "texcoord_in" when rendering.
+        m_texCoordsAttribLocationPost = m_postProcessShader.getAttribLocation("texcoord_in");
+        glEnableVertexAttribArray(m_texCoordsAttribLocationPost);
 
         CHECK_GL_ERRORS;
     }
@@ -307,6 +331,29 @@ void Bouncer::uploadVertexDataToVbos (
         glBindBuffer(GL_ARRAY_BUFFER, m_vbo_modelIns);
 
         glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        CHECK_GL_ERRORS;
+    }
+
+    // Generate VBO to store all screen quad data
+    {
+        float quadVertices[] = {
+            // positions   // texCoords
+            -1.0f,  1.0f,  0.0f, 1.0f,
+            -1.0f, -1.0f,  0.0f, 0.0f,
+             1.0f, -1.0f,  1.0f, 0.0f,
+
+            -1.0f,  1.0f,  0.0f, 1.0f,
+             1.0f, -1.0f,  1.0f, 0.0f,
+             1.0f,  1.0f,  1.0f, 1.0f
+        };
+
+        glGenBuffers(1, &m_vbo_screenVertex);
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo_screenVertex);
+
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         CHECK_GL_ERRORS;
@@ -372,6 +419,14 @@ void Bouncer::mapVboDataToVertexShaderInputLocations()
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo_vertexPositions);
     glVertexAttribPointer(m_positionAttribLocationMot, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Bind VAO in order to record the data mapping.
+    glBindVertexArray(m_vao_screenQuad);
+
+    auto fsize = sizeof(float);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo_screenVertex);
+    glVertexAttribPointer(m_positionAttribLocationPost, 2, GL_FLOAT, GL_FALSE, 4 * fsize, nullptr);
+    glVertexAttribPointer(m_texCoordsAttribLocationPost, 2, GL_FLOAT, GL_FALSE, 4 * fsize, (void*)(2 * fsize));
 
     //-- Unbind target, and restore default values:
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -465,6 +520,29 @@ void Bouncer::initDepthMap()
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_depthMapTexMot, 0);
     glDrawBuffer(GL_NONE);
     glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    CHECK_GL_ERRORS;
+}
+
+//----------------------------------------------------------------------------------------
+void Bouncer::initPostProcessFb()
+{
+    // depth map for motion blur
+    glGenFramebuffers(1, &m_fbo_screen);
+    glGenTextures(1, &m_screenTex);
+    glBindTexture(GL_TEXTURE_2D, m_screenTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_windowWidth, m_windowHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_screen);
+
+    glGenRenderbuffers(1, &m_rbo_screen);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_rbo_screen);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, m_windowWidth, m_windowHeight);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_rbo_screen);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_screenTex, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     CHECK_GL_ERRORS;
 }
@@ -717,6 +795,28 @@ void Bouncer::uploadCommonSceneUniforms() {
         CHECK_GL_ERRORS;
     }
     m_motionDepthShader.disable();
+
+    m_postProcessShader.enable();
+    {
+        //-- Set Perpsective matrix uniform for the scene:
+        location = m_postProcessShader.getUniformLocation("Perspective");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_perpsective));
+        location = m_postProcessShader.getUniformLocation("PerspectivePrev");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_perpsectivePrev));
+        location = m_postProcessShader.getUniformLocation("MotionBlur");
+        glUniform1i(location, m_boost > 1.0f);
+        location = m_postProcessShader.getUniformLocation("GaussianBlur");
+        glUniform1i(location, m_gamePaused);
+        location = m_postProcessShader.getUniformLocation("Darken");
+        glUniform1i(location, m_gamePaused);
+
+        //-- Set texture uniforms
+        location = m_postProcessShader.getUniformLocation("screenTexture");
+        glUniform1i(location, 0);
+        location = m_postProcessShader.getUniformLocation("depthTexture");
+        glUniform1i(location, 1);
+    }
+    m_postProcessShader.disable();
 }
 
 //----------------------------------------------------------------------------------------
@@ -773,6 +873,9 @@ void Bouncer::appLogic()
         movePlayer(duration);
         moveBall(duration);
     }
+    if(m_titleScreen) {
+        m_view = m_view * rotate(mat4(1), 0.005f, vec3(0, 1, 0));
+    }
 
     uploadCommonSceneUniforms();
     m_prevTime = now;
@@ -798,12 +901,15 @@ void Bouncer::guiLogic()
     ImGui::SetWindowSize("Window", ImVec2(0, 0));
     ImGui::SetWindowSize("Window", ImVec2(m_windowWidth, m_windowHeight));
     ImGui::Begin("Window", &showUIWindow, ImVec2(m_windowWidth, m_windowHeight), 0.0f, windowFlags);
+        ImVec2 pos;
 
-        ImVec2 pos = ImGui::GetCursorPos();
-        pos.x = m_windowWidth - 60;
-        pos.y = m_windowHeight - 30;
-        ImGui::SetCursorPos(pos);
-        ImGui::Text( "%.0f FPS", ImGui::GetIO().Framerate );
+        if(m_showFps) {
+            pos = ImGui::GetCursorPos();
+            pos.x = m_windowWidth - 60;
+            pos.y = m_windowHeight - 30;
+            ImGui::SetCursorPos(pos);
+            ImGui::Text( "%.0f FPS", ImGui::GetIO().Framerate );
+        }
 
         if(m_titleScreen) {
             pos = ImGui::GetCursorPos();
@@ -820,6 +926,14 @@ void Bouncer::guiLogic()
                 m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
                 startGame();
             }
+
+            pos = ImGui::GetCursorPos();
+            pos.x = (m_windowWidth / 2) - 50;
+            pos.y = (2 * m_windowHeight / 3) + 100;
+            ImGui::SetCursorPos(pos);
+            if( ImGui::Button("Exit", ImVec2(100, 50)) ) {
+                glfwSetWindowShouldClose(m_window, GL_TRUE);
+            }
         } else if (m_gamePaused) {
             pos = ImGui::GetCursorPos();
             pos.x = (m_windowWidth / 2) - 70;
@@ -828,6 +942,18 @@ void Bouncer::guiLogic()
             if( ImGui::Button("Resume", ImVec2(140, 70)) ) {
                 m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
                 m_gamePaused = false;
+                glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+            }
+
+            pos = ImGui::GetCursorPos();
+            pos.x = (m_windowWidth / 2) - 50;
+            pos.y = (2 * m_windowHeight / 3) + 100;
+            ImGui::SetCursorPos(pos);
+            if( ImGui::Button("Main Menu", ImVec2(100, 50)) ) {
+                m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
+                startGame();
+                m_titleScreen = true;
+                m_gamePaused = true;
                 glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
             }
         }
@@ -937,6 +1063,18 @@ void Bouncer::updateShaderUniforms(
         CHECK_GL_ERRORS;
     }
     m_motionDepthShader.disable();
+
+    m_postProcessShader.enable();
+    {
+        //-- Set View matrix:
+        location = m_postProcessShader.getUniformLocation("View");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_view));
+        CHECK_GL_ERRORS;
+        location = m_postProcessShader.getUniformLocation("ViewPrev");
+        glUniformMatrix4fv(location, 1, GL_FALSE, value_ptr(m_viewPrev));
+        CHECK_GL_ERRORS;
+    }
+    m_postProcessShader.disable();
 }
 
 //----------------------------------------------------------------------------------------
@@ -965,17 +1103,45 @@ void Bouncer::draw() {
     renderSceneDepth(m_motionDepthShader, m_vao_meshDataMot);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // render to display
+    // render scene to screen framebuffer
     glViewport(0, 0, m_windowWidth, m_windowHeight);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_fbo_screen);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_depthMapTex);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_CUBE_MAP, m_depthMapTex2);
     renderScene();
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     renderParticles();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // render screen framebuffer to display
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindVertexArray(m_vao_screenQuad);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_screenTex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_depthMapTexMot);
+    m_postProcessShader.enable();
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    m_postProcessShader.disable();
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindVertexArray(0);
+
+    // store previous view perspective matrices for motion blur
+    m_viewPrev = m_view;
+    m_perpsectivePrev = m_perpsective;
 }
 
 //----------------------------------------------------------------------------------------
@@ -1187,13 +1353,8 @@ bool Bouncer::keyInputEvent (
     bool eventHandled(false);
 
     if( action == GLFW_PRESS ) {
-        // close
-        if (key == GLFW_KEY_ESCAPE) {
-            glfwSetWindowShouldClose(m_window, GL_TRUE);
-            eventHandled = true;
-        }
         // gimme mouse back
-        if (key == GLFW_KEY_P) {
+        if ((key == GLFW_KEY_ESCAPE && !m_gamePaused) || key == GLFW_KEY_P) {
             m_soundEngine->play2D(getAssetFilePath("click.wav").c_str(), false);
             m_gamePaused = !m_gamePaused;
             m_keyUp = false;
@@ -1215,6 +1376,10 @@ bool Bouncer::keyInputEvent (
             m_titleScreen = true;
             m_gamePaused = true;
             glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+        }
+
+        if (key == GLFW_KEY_M) {
+            m_showFps = !m_showFps;
         }
     }
 

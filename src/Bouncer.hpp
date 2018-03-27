@@ -63,7 +63,9 @@ protected:
     void initPerspectiveMatrix();
     void initGameParams();
     void initPlayer();
+    void initGoal();
     void initAnimations();
+    void setKeyframes();
     
     //-- Rendering methods:
     void uploadCommonSceneUniforms();
@@ -161,6 +163,7 @@ protected:
     std::shared_ptr<SceneNode> m_arenaNode;
     std::shared_ptr<SceneNode> m_ballNode;
     std::shared_ptr<SceneNode> m_playerNode;
+    std::shared_ptr<SceneNode> m_goalNode;
 
     // mouse states
     double m_lastMouseX;
@@ -181,6 +184,7 @@ protected:
     float m_boost;
     bool m_inCollision;
     bool m_gamePaused;
+    bool m_gameWin;
 
     // animation states
     std::vector<glm::mat4> m_animPosOrig;

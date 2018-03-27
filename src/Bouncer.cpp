@@ -453,7 +453,11 @@ void Bouncer::mapTextures()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load and generate the texture
-    data = stbi_load(getAssetFilePath("stone.jpg").c_str(), &width, &height, &nrChannels, 0);
+    if(m_cubeArena) {
+        data = stbi_load(getAssetFilePath("stone.jpg").c_str(), &width, &height, &nrChannels, 0);
+    } else {
+        data = stbi_load(getAssetFilePath("metal.jpg").c_str(), &width, &height, &nrChannels, 0);
+    }
     if (data) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);

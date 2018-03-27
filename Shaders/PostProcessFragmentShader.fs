@@ -75,14 +75,14 @@ vec3 motionBlur(vec2 coord) {
 
 	// calculate motion vector
 	float depth = texture(depthTexture, coord).r;
-	vec4 viewPos = vec4(coord.x * 2.0f - 1.0f, -((1.0f - coord.y) * 2.0f - 1.0f), depth, 1);
+	vec4 viewPos = vec4(coord.x * 2.0f - 1.0f, (1.0f - coord.y) * 2.0f - 1.0f, depth, 1);
 	vec4 worldPos = inverse(Perspective * View) * viewPos;
 	worldPos /= worldPos.w;
 
 	vec4 viewPosPrev = PerspectivePrev * ViewPrev * worldPos;
 	viewPosPrev /= viewPosPrev.w;
 
-	vec2 velocity = (viewPos - viewPosPrev).xy / (2.0f * numSamples);
+	vec2 velocity = (viewPos - viewPosPrev).xy * 2.0 / numSamples;
 
 	// do blur
 	vec2 blurcoord = coord;

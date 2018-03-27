@@ -168,30 +168,6 @@ bool GlWindow::keyInputEvent (
 ) {
 	bool eventHandled(false);
 
-	if (action == GLFW_PRESS) {
-		if (key == GLFW_KEY_ESCAPE) {
-			glfwSetWindowShouldClose(m_window, GL_TRUE);
-			eventHandled = true;
-
-		} else if (key == GLFW_KEY_P) {
-			m_paused = !m_paused;
-			if(m_paused) {
-				static bool showPauseWindow(true);
-				ImGui::SetNextWindowPosCenter();
-				ImGui::SetNextWindowSize(ImVec2(m_framebufferWidth*0.5,
-						m_framebufferHeight*0.5));
-				ImGui::Begin("PAUSED", &showPauseWindow, ImVec2(m_framebufferWidth*0.5,
-								m_framebufferHeight*0.5), 0.1f, ImGuiWindowFlags_NoTitleBar);
-				ImGui::Text("Paused");
-				ImGui::Text("Press P to continue...");
-				ImGui::End();
-				renderImGui(m_framebufferWidth, m_framebufferHeight);
-				glfwSwapBuffers(m_window);
-			}
-			eventHandled = true;
-		}
-	}
-
 	return eventHandled;
 }
 

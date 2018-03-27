@@ -24,8 +24,8 @@ const unsigned int MAX_PARTICLES = 2000;
 
 //----------------------------------------------------------------------------------------
 // Constructor
-Bouncer::Bouncer(const std::string & arenaFile)
-    : m_arenaFile(arenaFile),
+Bouncer::Bouncer(bool cubeArena)
+    : m_cubeArena(cubeArena),
       m_keyUp(false),
       m_keyDown(false),
       m_keyLeft(false),
@@ -64,7 +64,7 @@ void Bouncer::init()
 
     enableVertexShaderInputSlots();
 
-    processLuaSceneFile(m_arenaFile, m_arenaNode);
+    processLuaSceneFile(m_cubeArena ? string("Assets/cubeArena.lua") : string("Assets/arena.lua"), m_arenaNode);
     processLuaSceneFile(string("Assets/ball.lua"), m_ballNode);
     processLuaSceneFile(string("Assets/player.lua"), m_playerNode);
     processLuaSceneFile(string("Assets/goal.lua"), m_goalNode);
@@ -75,10 +75,9 @@ void Bouncer::init()
     // class.
     unique_ptr<MeshConsolidator> meshConsolidator (new MeshConsolidator{
             getAssetFilePath("cube.obj"),
+            getAssetFilePath("cube_flip.obj"),
             getAssetFilePath("sphere.obj"),
-            getAssetFilePath("sphere_flip.obj"),
-            getAssetFilePath("icosphere.obj"),
-            getAssetFilePath("icosphere_flip.obj"),
+            getAssetFilePath("sphere_flip.obj")
     });
 
     // Acquire the BatchInfoMap from the MeshConsolidator.
@@ -557,7 +556,7 @@ void Bouncer::initPostProcessFb()
 void Bouncer::initPerspectiveMatrix()
 {
     float aspect = ((float)m_windowWidth) / m_windowHeight;
-    m_farPlane = 100.0f;
+    m_farPlane = 150.0f;
     m_perpsective = glm::perspective(degreesToRadians(60.0f), aspect, 0.1f, m_farPlane);
 
     m_lightPerspsective = glm::perspective(degreesToRadians(90.0f), 1.0f, 0.1f, m_farPlane);
@@ -619,8 +618,16 @@ void Bouncer::initAnimations() {
     m_animDuration = 2000;
     m_animElapsed = 0;
     m_animPlay = false;
-    for (auto& el : m_playerNode->children.front()->children) {
-        m_animPosOrig.push_back(el->trans);
+    if(!m_animPosOrig.empty()){
+        int i = 0;
+        for (auto& el : m_playerNode->children.front()->children) {
+            el->trans = m_animPosOrig[i];
+            ++i;
+        }
+    } else {
+        for (auto& el : m_playerNode->children.front()->children) {
+            m_animPosOrig.push_back(el->trans);
+        }
     }
 }
 
@@ -928,7 +935,9 @@ void Bouncer::appLogic()
         movePlayer(duration);
         moveBall(duration);
 
-        m_goalNode->trans = rotate(mat4(1), duration * 0.0002f, vec3(0, 1, 0)) * m_goalNode->trans;
+        if(!m_cubeArena) {
+            m_goalNode->trans = rotate(mat4(1), duration * 0.0002f, vec3(0, 1, 0)) * m_goalNode->trans;
+        }
     }
     if(m_titleScreen) {
         m_view = m_view * rotate(mat4(1), duration * 0.0002f, vec3(0, 1, 0));
@@ -1598,10 +1607,13 @@ void Bouncer::moveBall(unsigned int time)
 
 bool Bouncer::ballCollision()
 {
+    const float bound = 49.5f;
     bool collision = false;
     vec4 playerPos = m_playerNode->trans * vec4(0,0,0,1);
     vec4 ballPos = m_ballNode->trans * vec4(0,0,0,1);
     vec4 goalPos = m_goalNode->trans * vec4(0,0,0,1);
+    bool playerCollide = length(vec3(ballPos - playerPos)) <= 1.5f;
+    bool wallCollide = m_cubeArena ? (abs(ballPos.x) >= bound || abs(ballPos.y) >= bound || abs(ballPos.z) >= bound) : length(vec3(ballPos)) >= bound;
     if(length(vec3(ballPos - goalPos)) <= 10.5f) {
         collision = true;
         m_ballNode->trans = m_goalNode->trans;
@@ -1609,20 +1621,31 @@ bool Bouncer::ballCollision()
         m_gamePaused = true;
         glfwSetInputMode(m_window, GLFW_CURSOR, m_gamePaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
         m_soundEngine->play2D(getAssetFilePath("win.wav").c_str(), false);
-    } else if(length(vec3(ballPos - playerPos)) <= 1.5f || length(vec3(ballPos)) >= 49.5f) {
+    } else if(playerCollide || wallCollide) {
         if(!m_inCollision) {
-            if(length(vec3(ballPos - playerPos)) <= 1.5f) {
-                collision = true;
-                m_inCollision = true;
+            collision = true;
+            m_inCollision = true;
+
+            if(playerCollide) {
                 vec3 n = normalize(vec3(ballPos - playerPos));
                 m_ballDir = normalize(m_ballDir - (2 * dot(m_ballDir, n) * n));
             }
 
-            if(length(vec3(ballPos)) >= 49.5f) {
-                collision = true;
-                m_inCollision = true;
+            if(wallCollide) {
                 vec3 n = normalize(vec3(-ballPos));
-                m_ballDir = normalize(m_ballDir - (2 * dot(m_ballDir, n) * n));
+                if(m_cubeArena) {
+                    if(abs(ballPos.x) >= bound) {
+                        m_ballDir.x = - m_ballDir.x;
+                    }
+                    if(abs(ballPos.y) >= bound) {
+                        m_ballDir.y = - m_ballDir.y;
+                    }
+                    if(abs(ballPos.z) >= bound) {
+                        m_ballDir.z = - m_ballDir.z;
+                    }
+                } else {
+                    m_ballDir = normalize(m_ballDir - (2 * dot(m_ballDir, n) * n));
+                }
             }
         }
     } else if (m_inCollision) {
@@ -1633,9 +1656,11 @@ bool Bouncer::ballCollision()
 
 bool Bouncer::playerCollision()
 {
+    const float bound = 49.0f;
     bool collision = false;
     vec4 playerPos = m_playerNode->trans * vec4(0,0,0,1);
-    if(length(vec3(playerPos)) >= 49.0f) {
+    bool wallCollide = m_cubeArena ? (abs(playerPos.x) >= bound || abs(playerPos.y) >= bound || abs(playerPos.z) >= bound) : length(vec3(playerPos)) >= bound;
+    if(wallCollide) {
         collision = true;
     }
     return collision;
@@ -1655,5 +1680,6 @@ void Bouncer::startGame() {
     initGameParams();
     initPlayer();
     initGoal();
+    initAnimations();
     initViewMatrix();
 }

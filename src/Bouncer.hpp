@@ -30,7 +30,7 @@ struct Keyframe{
 
 class Bouncer : public GlWindow {
 public:
-    Bouncer(const std::string & arenaFile);
+    Bouncer(bool cubeArena);
     virtual ~Bouncer();
 
 protected:
@@ -158,8 +158,6 @@ protected:
 
     BatchInfoMap m_batchInfoMap;
 
-    std::string m_arenaFile;
-
     std::shared_ptr<SceneNode> m_arenaNode;
     std::shared_ptr<SceneNode> m_ballNode;
     std::shared_ptr<SceneNode> m_playerNode;
@@ -180,11 +178,13 @@ protected:
     std::chrono::time_point<std::chrono::high_resolution_clock> m_prevTime;
 
     // game states
+    bool m_cubeArena;
     glm::vec3 m_ballDir;
     float m_boost;
     bool m_inCollision;
     bool m_gamePaused;
     bool m_gameWin;
+    float m_goalPos;
 
     // animation states
     std::vector<glm::mat4> m_animPosOrig;

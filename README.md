@@ -1,6 +1,7 @@
 # Bouncer
 
 You play as the blue ball, trying to hit the red ball to get it into the green goal.
+
 See a video demo here: 
 [![Bouncer](http://img.youtube.com/vi/iEwRRAtY8vY/0.jpg)](http://www.youtube.com/watch?v=iEwRRAtY8vY)
 
